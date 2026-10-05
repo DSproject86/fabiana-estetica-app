@@ -25,6 +25,11 @@ npm run db:migrate:deploy   # applica le migrazioni (usa DATABASE_URL_UNPOOLED)
 npm run db:seed             # admin, parametri, testi: idempotente, si può rilanciare
 ```
 
+Da GitHub (consigliato): **Actions → "Database: migrazioni e seed" → Run workflow**.
+Il workflow (`.github/workflows/db-migrate.yml`) esegue `npm ci`, `prisma migrate deploy` e il seed,
+leggendo i secrets del repository: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `ADMIN_EMAIL_1`,
+`ADMIN_EMAIL_2`, `ADMIN_PASSWORD_1`, `ADMIN_PASSWORD_2` (facoltativi `ADMIN_NAME_1`, `ADMIN_NAME_2`).
+
 Per una nuova migrazione: modificare `prisma/schema.prisma`, poi
 `npx prisma migrate dev --create-only --name <nome>` su un database di sviluppo, controllare l'SQL e committarlo.
 La migrazione iniziale contiene anche vincoli scritti a mano (anti-sovrapposizione degli

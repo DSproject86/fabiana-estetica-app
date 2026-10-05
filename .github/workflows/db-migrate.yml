@@ -1,0 +1,70 @@
+# Applica le migrazioni Prisma e il seed al database Neon.
+# Si avvia SOLO a mano: GitHub → Actions → "Database: migrazioni e seed" → Run workflow.
+# Le migrazioni non fanno parte del build di Vercel (Preview e Production condividono il database).
+name: "Database: migrazioni e seed"
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_seed:
+        description: "Eseguire anche il seed (idempotente)?"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Mai due esecuzioni in parallelo sullo stesso database.
+concurrency:
+  group: db-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+      ADMIN_EMAIL_1: ${{ secrets.ADMIN_EMAIL_1 }}
+      ADMIN_EMAIL_2: ${{ secrets.ADMIN_EMAIL_2 }}
+      ADMIN_PASSWORD_1: ${{ secrets.ADMIN_PASSWORD_1 }}
+      ADMIN_PASSWORD_2: ${{ secrets.ADMIN_PASSWORD_2 }}
+      ADMIN_NAME_1: ${{ secrets.ADMIN_NAME_1 }}
+      ADMIN_NAME_2: ${{ secrets.ADMIN_NAME_2 }}
+    steps:
+      - name: Controllo dei secrets
+        run: |
+          missing=0
+          for name in DATABASE_URL DATABASE_URL_UNPOOLED; do
+            if [ -z "${!name}" ]; then echo "::error::Secret mancante: $name"; missing=1; fi
+          done
+          if [ "${{ inputs.run_seed }}" = "true" ]; then
+            for name in ADMIN_EMAIL_1 ADMIN_EMAIL_2 ADMIN_PASSWORD_1 ADMIN_PASSWORD_2; do
+              if [ -z "${!name}" ]; then echo "::error::Secret mancante: $name"; missing=1; fi
+            done
+          fi
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installazione dipendenze
+        run: npm ci
+
+      - name: Stato migrazioni (prima)
+        run: npx prisma migrate status || true
+
+      - name: Migrazioni (prisma migrate deploy)
+        run: npx prisma migrate deploy
+
+      - name: Seed
+        if: ${{ inputs.run_seed }}
+        run: npx prisma db seed
+
+      - name: Stato migrazioni (dopo)
+        run: npx prisma migrate status
