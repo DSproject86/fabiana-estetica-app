@@ -1,0 +1,341 @@
+// Schema completo di Fabiana L. · Estetica (riferimento: docs/SPEC.md).
+// Importi in centesimi (Int). Istanti in timestamptz; le fasce orarie sono
+// minuti dalla mezzanotte, ora di Europe/Rome.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ─────────────── ACCESSO ───────────────
+
+model Admin {
+  id               String    @id @default(cuid())
+  email            String    @unique // sempre minuscola
+  name             String
+  passwordHash     String // bcrypt
+  sessionVersion   Int       @default(0) // +1 = esci da tutti i dispositivi
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime? @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+}
+
+model InviteLink {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3) // null = link attivo (al massimo uno)
+  clients   Client[]
+}
+
+enum ClientSource {
+  INVITE // iscritta dal link
+  ADMIN // inserita a mano dall'admin
+}
+
+model Client {
+  id                String       @id @default(cuid())
+  firstName         String
+  lastName          String
+  phone             String // formato +39…, serve per wa.me
+  email             String?      @unique // minuscola; obbligatoria per chi si iscrive dal link
+  privacyAcceptedAt DateTime?    @db.Timestamptz(3) // null solo se creata dall'admin
+  privacyVersion    String?
+  source            ClientSource @default(INVITE)
+  inviteLinkId      String?
+  inviteLink        InviteLink?  @relation(fields: [inviteLinkId], references: [id], onDelete: SetNull)
+  blockedAt         DateTime?    @db.Timestamptz(3)
+  allergyNotes      String? // solo admin
+  adminNotes        String? // solo admin
+  sessionVersion    Int          @default(0)
+  lastLoginAt       DateTime?    @db.Timestamptz(3)
+  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @db.Timestamptz(3)
+
+  loginCodes    LoginCode[]
+  appointments  Appointment[]
+  packages      ClientPackage[]
+  notifications NotificationLog[]
+
+  @@index([lastName, firstName])
+}
+
+model LoginCode {
+  id         String    @id @default(cuid())
+  clientId   String
+  client     Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  codeHash   String // HMAC del codice, mai in chiaro
+  expiresAt  DateTime  @db.Timestamptz(3)
+  attempts   Int       @default(0)
+  consumedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([clientId, createdAt])
+}
+
+// ─────────────── LISTINO ───────────────
+
+model ServiceCategory {
+  id        String    @id @default(cuid())
+  name      String
+  sortOrder Int       @default(0)
+  active    Boolean   @default(true)
+  services  Service[]
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+}
+
+model Service {
+  id          String          @id @default(cuid())
+  categoryId  String
+  category    ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name        String
+  description String?
+  durationMin Int
+  priceCents  Int
+  active      Boolean         @default(true) // false = nascosto alle clienti
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+
+  appointmentItems AppointmentItem[]
+  packageTemplates PackageTemplate[]
+  clientPackages   ClientPackage[]
+
+  @@index([categoryId, sortOrder])
+}
+
+// Pacchetti a listino (es. "10 massaggi"), da cui si crea il pacchetto della cliente
+model PackageTemplate {
+  id         String   @id @default(cuid())
+  name       String
+  sessions   Int
+  priceCents Int
+  serviceId  String? // servizio a cui valgono le sedute (facoltativo)
+  service    Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  active     Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  clientPackages ClientPackage[]
+}
+
+// ─────────────── ORARI DI LAVORO ───────────────
+
+model WeeklySlot {
+  id          String @id @default(cuid())
+  weekday     Int // 1 = lunedì … 7 = domenica
+  startMinute Int // 540 = 09:00 (ora di Roma)
+  endMinute   Int
+
+  @@index([weekday])
+}
+
+model DateOverride {
+  id        String             @id @default(cuid())
+  date      DateTime           @unique @db.Date // giorno di calendario a Roma
+  closed    Boolean            @default(false) // true = chiuso tutto il giorno
+  note      String?
+  slots     DateOverrideSlot[] // fasce sostitutive se non chiuso
+  createdAt DateTime           @default(now()) @db.Timestamptz(3)
+}
+
+model DateOverrideSlot {
+  id          String       @id @default(cuid())
+  overrideId  String
+  override    DateOverride @relation(fields: [overrideId], references: [id], onDelete: Cascade)
+  startMinute Int
+  endMinute   Int
+
+  @@index([overrideId])
+}
+
+model TimeBlock {
+  id        String   @id @default(cuid())
+  startsAt  DateTime @db.Timestamptz(3)
+  endsAt    DateTime @db.Timestamptz(3)
+  reason    String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([startsAt])
+}
+
+// ─────────────── APPUNTAMENTI ───────────────
+
+enum AppointmentStatus {
+  CONFIRMED
+  CANCELLED
+  NO_SHOW // non presentata: non blocca il calendario, statistiche a parte
+}
+
+enum Actor {
+  CLIENT
+  ADMIN
+  SYSTEM
+}
+
+// Vincoli aggiunti a mano nella migrazione SQL (Prisma non li gestisce):
+//   CHECK ("endsAt" > "startsAt")
+//   EXCLUDE USING gist (tstzrange("startsAt","endsAt",'[)') WITH &&) WHERE (status = 'CONFIRMED')
+model Appointment {
+  id                   String            @id @default(cuid())
+  clientId             String
+  client               Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  startsAt             DateTime          @db.Timestamptz(3)
+  endsAt               DateTime          @db.Timestamptz(3) // inizio + durata arrotondata + pausa
+  durationMin          Int // durata servizi già arrotondata
+  bufferMin            Int // pausa applicata (0 possibile se creato dall'admin)
+  totalPriceCents      Int // totale listino al momento della prenotazione
+  status               AppointmentStatus @default(CONFIRMED)
+  createdBy            Actor
+  cancelledAt          DateTime?         @db.Timestamptz(3)
+  cancelledBy          Actor?
+  doneAt               DateTime?         @db.Timestamptz(3) // spunta "Fatto" (reversibile)
+  amountCollectedCents Int? // incassato, escluse le voci scalate da un pacchetto
+  adminNotes           String?
+  reminderEmailSentAt  DateTime?         @db.Timestamptz(3)
+  whatsappSentAt       DateTime?         @db.Timestamptz(3) // spunta "inviato" (lista di domani)
+  createdAt            DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime          @updatedAt @db.Timestamptz(3)
+
+  items         AppointmentItem[]
+  notifications NotificationLog[]
+
+  @@index([startsAt])
+  @@index([clientId, startsAt])
+}
+
+model AppointmentItem {
+  id              String         @id @default(cuid())
+  appointmentId   String
+  appointment     Appointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  serviceId       String?
+  service         Service?       @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  name            String // copia al momento della prenotazione
+  durationMin     Int
+  priceCents      Int
+  sortOrder       Int            @default(0)
+  clientPackageId String? // se valorizzato: seduta scalata da un pacchetto
+  clientPackage   ClientPackage? @relation(fields: [clientPackageId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId])
+  @@index([serviceId])
+  @@index([clientPackageId])
+}
+
+// ─────────────── PACCHETTI CLIENTE ───────────────
+
+enum PaymentMethod {
+  CASH
+  CARD
+}
+
+model ClientPackage {
+  id                 String           @id @default(cuid())
+  clientId           String
+  client             Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  templateId         String?
+  template           PackageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  serviceId          String?
+  service            Service?         @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  name               String
+  priceCents         Int
+  totalSessions      Int
+  sessionsUsedBefore Int              @default(0) // sedute già fatte prima dell'app
+  notes              String?
+  closedAt           DateTime?        @db.Timestamptz(3) // archiviato
+  createdAt          DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @db.Timestamptz(3)
+
+  payments PackagePayment[]
+  items    AppointmentItem[]
+
+  @@index([clientId])
+}
+
+model PackagePayment {
+  id          String        @id @default(cuid())
+  packageId   String
+  package     ClientPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  paidOn      DateTime      @db.Date // data di registrazione (usata dalle statistiche)
+  amountCents Int
+  method      PaymentMethod
+  note        String?
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+
+  @@index([paidOn])
+  @@index([packageId])
+}
+
+// ─────────────── PARAMETRI ───────────────
+
+model Settings {
+  id                   Int      @id @default(1) // una sola riga
+  slotGridMin          Int      @default(30)
+  durationRoundingMin  Int      @default(30)
+  bufferMin            Int      @default(30)
+  minNoticeMin         Int      @default(60)
+  bookingHorizonMonths Int      @default(3)
+  reminderHour         Int      @default(18)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(3)
+}
+
+// ─────────────── NOTIFICHE ───────────────
+
+enum Channel {
+  EMAIL
+  WHATSAPP
+}
+
+enum MessageKind {
+  LOGIN_CODE
+  BOOKING_CONFIRMED
+  REMINDER
+  APPOINTMENT_CHANGED
+  APPOINTMENT_CANCELLED
+}
+
+model MessageTemplate {
+  id        String      @id @default(cuid())
+  kind      MessageKind
+  channel   Channel
+  subject   String? // solo email
+  body      String // segnaposto: {nome} {data} {ora} {servizi} {totale} {codice}
+  updatedAt DateTime    @updatedAt @db.Timestamptz(3)
+
+  @@unique([kind, channel])
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model NotificationLog {
+  id                String             @id @default(cuid())
+  channel           Channel
+  kind              MessageKind
+  provider          String // "resend", "wa-link", in futuro "wa-cloud"
+  recipient         String
+  clientId          String?
+  client            Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  appointmentId     String?
+  appointment       Appointment?       @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  status            NotificationStatus @default(PENDING)
+  providerMessageId String?
+  error             String?
+  createdAt         DateTime           @default(now()) @db.Timestamptz(3)
+  sentAt            DateTime?          @db.Timestamptz(3)
+
+  @@index([appointmentId, kind])
+  @@index([clientId])
+}

@@ -130,3 +130,22 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
 ## Modo di lavorare
 
 - Si lavora a step. Alla fine di ogni step: riepilogo e attesa di conferma prima di commit e push.
+
+## Decisioni prese (step 1)
+
+- **Email cliente facoltativa** nel database (`Client.email` nullable e unica): obbligatoria per chi si
+  iscrive dal link, facoltativa per le clienti inserite a mano dall'admin.
+- **Pausa:** il controllo "dentro l'orario di lavoro" usa la fine **senza pausa**; la pausa serve solo
+  a distanziare gli appuntamenti. `endsAt` include la pausa (vincolo anti-sovrapposizione), quindi
+  l'ultimo appuntamento può finire esattamente all'orario di chiusura.
+- **Pausa per singolo appuntamento:** l'admin può impostare `bufferMin = 0` sugli appuntamenti che crea.
+- **Stato NO_SHOW** ("non presentata"): non blocca il calendario; nelle statistiche si conta a parte.
+- **Incassi senza doppi conteggi:** alla spunta "Fatto" l'importo precompilato esclude le voci scalate da
+  un pacchetto (`clientPackageId` valorizzato), perché quei soldi stanno in `PackagePayment`.
+- **Ora del promemoria** modificabile: `Settings.reminderHour` (default 18).
+- **Migrazioni:** solo con `prisma migrate` (mai `db push`), lanciate a mano con `prisma migrate deploy`.
+  Non fanno parte del build di Vercel (Preview e Production condividono lo stesso database).
+- **Seed idempotente** (upsert), rilanciabile senza creare duplicati.
+- **Sessioni:** cookie firmato (JWT HS256 con `SESSION_SECRET`) che contiene id e `sessionVersion`;
+  aumentare `sessionVersion` invalida tutte le sessioni di quell'utente.
+- **Prisma 6.x:** la 7 non accetta più `url`/`directUrl` nello schema.

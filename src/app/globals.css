@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/*
+ * I colori vengono da src/config/brand.ts: il layout scrive le variabili --brand-*
+ * e qui le collego ai nomi Tailwind (bg-cipria, text-prugna, border-oro/40…).
+ */
+@theme inline {
+  --color-cipria: var(--brand-cipria);
+  --color-oro: var(--brand-oro);
+  --color-avorio: var(--brand-avorio);
+  --color-prugna: var(--brand-prugna);
+  --color-salvia: var(--brand-salvia);
+
+  --font-serif: var(--font-playfair), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-avorio);
+    color: var(--color-prugna);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-oro);
+    outline-offset: 2px;
+  }
+}
