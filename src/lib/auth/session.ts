@@ -6,7 +6,8 @@ import { SignJWT, jwtVerify } from "jose";
  * tutte le sessioni esistenti di quell'utente smettono di valere.
  */
 
-export type SessionRole = "admin" | "client";
+/** "login": accesso cliente in corso (email in attesa del codice), non è una sessione. */
+export type SessionRole = "admin" | "client" | "login";
 
 export type SessionPayload = {
   sub: string;
@@ -16,18 +17,24 @@ export type SessionPayload = {
 
 export const ADMIN_COOKIE = "fl_admin";
 export const CLIENT_COOKIE = "fl_client";
+export const LOGIN_PENDING_COOKIE = "fl_login";
 
 export const ADMIN_SESSION_SECONDS = 60 * 60 * 24 * 30; // 30 giorni
-export const CLIENT_SESSION_SECONDS = 60 * 60 * 24 * 182; // ~6 mesi
+export const CLIENT_SESSION_SECONDS = 60 * 60 * 24 * 180; // 180 giorni
+export const LOGIN_PENDING_SECONDS = 60 * 30; // tempo per inserire il codice (o chiederne un altro)
 
 const ISSUER = "fabiana-estetica";
 
-function secretKey(): Uint8Array {
+export function sessionSecret(): string {
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < 32) {
     throw new Error("SESSION_SECRET mancante o troppo corto (minimo 32 caratteri).");
   }
-  return new TextEncoder().encode(secret);
+  return secret;
+}
+
+function secretKey(): Uint8Array {
+  return new TextEncoder().encode(sessionSecret());
 }
 
 export async function signSession(payload: SessionPayload, maxAgeSeconds: number): Promise<string> {

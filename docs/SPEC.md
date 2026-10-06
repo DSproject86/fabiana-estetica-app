@@ -122,7 +122,7 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
 2. Listino
 3. Orari di lavoro
 4. Motore disponibilità con test automatici
-5. Area cliente (accesso temporaneo senza codice, solo per i test)
+5. Area cliente (con accesso tramite codice via email già da questo step)
 6. Email e WhatsApp
 7. Agenda admin e statistiche
 8. Pacchetti, clienti, PWA e lancio
@@ -149,3 +149,27 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
 - **Sessioni:** cookie firmato (JWT HS256 con `SESSION_SECRET`) che contiene id e `sessionVersion`;
   aumentare `sessionVersion` invalida tutte le sessioni di quell'utente.
 - **Prisma 6.x:** la 7 non accetta più `url`/`directUrl` nello schema.
+
+## Decisioni prese (step 5)
+
+- **Accesso con codice già allo step 5** (non più accesso temporaneo senza codice). Invio con Resend tramite
+  `RESEND_API_KEY` ed `EMAIL_FROM`; finché non c'è un dominio verificato, Resend consegna solo all'email del
+  proprietario dell'account. Conferme, promemoria e altre email restano allo step 6.
+- **Codice:** 6 cifre, salvato come HMAC-SHA256 (chiave ricavata da `SESSION_SECRET`), valido 10 minuti,
+  massimo 5 tentativi; vale solo l'ultimo codice richiesto. Massimo 3 codici ogni 15 minuti per email.
+- **Risposte neutre:** "Se l'email è registrata riceverai un codice" per tutte le email; il codice si prepara e
+  si invia dopo la risposta, così nemmeno i tempi rivelano chi è iscritta. Ogni invio finisce in `NotificationLog`.
+- **Sessione cliente:** cookie `fl_client` separato da quello admin, 180 giorni. L'email in attesa del codice sta
+  in un cookie firmato di 30 minuti (`fl_login`), non nell'indirizzo. Una cliente bloccata esce subito.
+- **Link d'invito:** un solo link attivo, garantito da un indice unico parziale nel database; "Rigenera" disattiva
+  il vecchio. Massimo **5 iscrizioni all'ora** per link (oltre: "Riprova più tardi", per tutte). Se l'email è già
+  iscritta non si crea un doppione e i dati non cambiano: si passa al codice.
+- **Cellulare** sempre in formato `+39…` (i numeri esteri scritti con `+` o `00` restano col loro prefisso).
+- **WhatsApp di Fabiana:** `Settings.businessWhatsapp`, modificabile da Impostazioni; se vuoto il pulsante
+  "Scrivi a Fabiana" non compare.
+- **Indirizzo del link d'invito:** `APP_URL` se impostata, altrimenti il dominio da cui si sta navigando.
+
+## Da fare prima del lancio
+
+- Informativa privacy definitiva (ora `/privacy` ha un testo provvisorio; aggiornare anche `PRIVACY_VERSION`).
+- Dominio verificato su Resend e `EMAIL_FROM` con quel dominio.

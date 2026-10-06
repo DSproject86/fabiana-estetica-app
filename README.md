@@ -57,6 +57,9 @@ Vedi [`.env.example`](.env.example).
 
 - `src/config/brand.ts`: nome, colori e font (unico file da modificare per la grafica)
 - `src/app/admin/`: area admin (`login/` e le pagine del menu in `(area)/`)
+- `src/app/{accedi,invito,prenota,appuntamenti,privacy}/`: area cliente
+- `src/lib/auth/client*.ts`, `loginCode.ts`: sessione cliente e codice di accesso via email
+- `src/lib/email/`, `src/lib/notifications/`: invio email (Resend) e registro degli invii
 - `src/lib/auth/`: sessioni con cookie firmato, password, controlli d'accesso
-- `src/proxy.ts`: primo filtro sulle pagine `/admin`
+- `src/proxy.ts`: primo filtro sulle pagine `/admin`, `/prenota` e `/appuntamenti`
 - `prisma/`: schema, migrazioni, seed

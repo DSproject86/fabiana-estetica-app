@@ -30,7 +30,7 @@ model InviteLink {
   id        String    @id @default(cuid())
   token     String    @unique
   createdAt DateTime  @default(now()) @db.Timestamptz(3)
-  revokedAt DateTime? @db.Timestamptz(3) // null = link attivo (al massimo uno)
+  revokedAt DateTime? @db.Timestamptz(3) // null = link attivo (al massimo uno: indice unico parziale nella migrazione)
   clients   Client[]
 }
 
@@ -64,6 +64,7 @@ model Client {
   notifications NotificationLog[]
 
   @@index([lastName, firstName])
+  @@index([inviteLinkId, createdAt])
 }
 
 model LoginCode {
@@ -284,6 +285,7 @@ model Settings {
   minNoticeMin         Int      @default(60)
   bookingHorizonMonths Int      @default(3)
   reminderHour         Int      @default(18)
+  businessWhatsapp     String? // cellulare di Fabiana (+39…) per i link wa.me delle clienti
   updatedAt            DateTime @updatedAt @db.Timestamptz(3)
 }
 
