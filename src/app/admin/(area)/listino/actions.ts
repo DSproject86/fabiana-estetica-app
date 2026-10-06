@@ -132,11 +132,11 @@ export async function createPackageTemplate(
   await requireAdmin();
   const parsed = parseForm(packageTemplateSchema, formData);
   if ("state" in parsed) return parsed.state;
-  const { price, ...data } = parsed.data;
+  const { price, coverage, ...data } = parsed.data;
 
   const last = await prisma.packageTemplate.aggregate({ _max: { sortOrder: true } });
   await prisma.packageTemplate.create({
-    data: { ...data, priceCents: price, sortOrder: (last._max.sortOrder ?? -1) + 1 },
+    data: { ...data, ...coverage, priceCents: price, sortOrder: (last._max.sortOrder ?? -1) + 1 },
   });
   done();
 }
@@ -149,9 +149,9 @@ export async function updatePackageTemplate(
   await requireAdmin();
   const parsed = parseForm(packageTemplateSchema, formData);
   if ("state" in parsed) return parsed.state;
-  const { price, ...data } = parsed.data;
+  const { price, coverage, ...data } = parsed.data;
 
-  await prisma.packageTemplate.update({ where: { id }, data: { ...data, priceCents: price } });
+  await prisma.packageTemplate.update({ where: { id }, data: { ...data, ...coverage, priceCents: price } });
   done();
 }
 

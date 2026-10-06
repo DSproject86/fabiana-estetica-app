@@ -27,8 +27,8 @@ export default async function NuovoAppuntamentoPage({ searchParams }: { searchPa
   const choice = parsePickerParams(await searchParams);
   const now = new Date();
   const client = choice.client
-    ? await prisma.client.findUnique({
-        where: { id: choice.client },
+    ? await prisma.client.findFirst({
+        where: { id: choice.client, anonymizedAt: null },
         select: { id: true, firstName: true, lastName: true, phone: true, email: true, blockedAt: true, allergyNotes: true },
       })
     : null;
@@ -134,7 +134,7 @@ export default async function NuovoAppuntamentoPage({ searchParams }: { searchPa
             {formatPhone(client.phone)}
             {client.email ? ` · ${client.email}` : " · senza email"}
           </span>
-          {client.allergyNotes ? <span className="text-xs text-red-800">Allergie: {client.allergyNotes}</span> : null}
+          {settings.showAllergyNotes && client.allergyNotes ? <span className="text-xs text-red-800">Allergie: {client.allergyNotes}</span> : null}
         </span>
         <Link href="/admin/agenda/nuovo" className="shrink-0 rounded-full px-3 py-2 text-sm text-prugna/70 hover:bg-cipria/20">
           Cambia

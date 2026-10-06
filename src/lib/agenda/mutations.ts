@@ -11,6 +11,8 @@ import { withBookingLock } from "@/lib/availability/lock";
 import { loadSettings } from "@/lib/availability/queries";
 import { loadServicesForBooking } from "@/lib/availability/services";
 import { MAX_CENTS } from "@/lib/money";
+import { loadOfferPackages } from "@/lib/packages/queries";
+import { amountAfterPackageChange, defaultLinks, itemOffers } from "@/lib/packages/rules";
 import type { Db } from "@/lib/schedule/queries";
 import { dayKeyOf } from "@/lib/time/rome";
 import { canCancel, canEdit, canMarkOutcome, collectableCents, mergeItems } from "./rules";
@@ -227,6 +229,8 @@ export function cancelAppointment(input: {
     if (!canCancel(appt)) return { ok: false, error: CANCEL_NOT_ALLOWED };
     // Segnato Fatto da un altro telefono dopo che la conferma era stata mostrata senza importo: si richiede di nuovo.
     if (appt.doneAt && !input.confirmDone) return { ok: false, error: CONFIRM_DONE_CANCEL };
+    // Le sedute scalate tornano nei pacchetti.
+    await tx.appointmentItem.updateMany({ where: { appointmentId: appt.id }, data: { clientPackageId: null } });
     await tx.appointment.update({
       where: { id: appt.id },
       data: { status: "CANCELLED", cancelledAt: now, cancelledBy: "ADMIN", doneAt: null, amountCollectedCents: null },
@@ -237,39 +241,120 @@ export function cancelAppointment(input: {
 
 // ─────────────── Fatto e importo incassato ───────────────
 
-/** Spunta "Fatto" (importo precompilato senza le voci a pacchetto) o la toglie (azzera doneAt e importo). */
+/**
+ * Spunta "Fatto": salva doneAt e l'importo precompilato. Le voci coperte da UN SOLO pacchetto attivo della
+ * cliente (con sedute rimaste) si scalano subito da quel pacchetto e l'importo le esclude; con più pacchetti
+ * possibili si sceglie dopo (setItemPackage). Togliere la spunta azzera doneAt e importo e rimette le sedute.
+ */
 export function setDone(input: {
   appointmentId: string;
   done: boolean;
   now?: Date;
-}): Promise<AgendaResult<{ amountCollectedCents: number | null }>> {
+}): Promise<AgendaResult<{ amountCollectedCents: number | null; linkedItems: number }>> {
   const now = input.now ?? new Date();
-  return locked<{ amountCollectedCents: number | null }>(async (tx) => {
+  return locked<{ amountCollectedCents: number | null; linkedItems: number }>(async (tx) => {
     const appt = await tx.appointment.findUnique({
       where: { id: input.appointmentId },
       select: {
         id: true,
+        clientId: true,
         status: true,
         startsAt: true,
         doneAt: true,
         amountCollectedCents: true,
-        items: { select: { priceCents: true, clientPackageId: true } },
+        items: {
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, priceCents: true, clientPackageId: true, serviceId: true, service: { select: { categoryId: true } } },
+        },
       },
     });
     if (!appt) return { ok: false, error: NOT_FOUND };
 
     if (!input.done) {
       if (appt.doneAt) {
+        await tx.appointmentItem.updateMany({ where: { appointmentId: appt.id }, data: { clientPackageId: null } });
         await tx.appointment.update({ where: { id: appt.id }, data: { doneAt: null, amountCollectedCents: null } });
       }
-      return { ok: true, amountCollectedCents: null };
+      return { ok: true, amountCollectedCents: null, linkedItems: 0 };
     }
 
     if (appt.status !== "CONFIRMED") return { ok: false, error: "Si può segnare come Fatto solo un appuntamento confermato." };
-    if (appt.doneAt) return { ok: true, amountCollectedCents: appt.amountCollectedCents }; // doppio tocco
+    if (appt.doneAt) {
+      // doppio tocco
+      return { ok: true, amountCollectedCents: appt.amountCollectedCents, linkedItems: appt.items.filter((i) => i.clientPackageId).length };
+    }
     if (!canMarkOutcome(appt, now)) return { ok: false, error: TOO_EARLY };
-    const amountCollectedCents = collectableCents(appt.items);
+
+    const offerItems = appt.items.map((i) => ({
+      id: i.id,
+      serviceId: i.serviceId,
+      categoryId: i.service?.categoryId ?? null,
+      clientPackageId: null,
+    }));
+    const packages = (await loadOfferPackages([appt.clientId], [appt.id], tx)).get(appt.clientId) ?? [];
+    const links = defaultLinks(offerItems, packages);
+    // Eventuali collegamenti rimasti da prima (non dovrebbero esserci) vengono sostituiti da quelli di adesso.
+    await tx.appointmentItem.updateMany({ where: { appointmentId: appt.id }, data: { clientPackageId: null } });
+    for (const [itemId, clientPackageId] of links) {
+      await tx.appointmentItem.update({ where: { id: itemId }, data: { clientPackageId } });
+    }
+    const amountCollectedCents = collectableCents(appt.items.map((i) => ({ priceCents: i.priceCents, clientPackageId: links.get(i.id) ?? null })));
     await tx.appointment.update({ where: { id: appt.id }, data: { doneAt: now, amountCollectedCents } });
+    return { ok: true, amountCollectedCents, linkedItems: links.size };
+  });
+}
+
+export const PACKAGE_NOT_AVAILABLE = "Questo pacchetto non si può usare per questa voce (archiviato, sedute finite o servizio diverso).";
+
+/**
+ * "Scala dal pacchetto": collega (o scollega, con `clientPackageId` null) una voce di un appuntamento
+ * Fatto a un pacchetto attivo della stessa cliente che la copre e ha ancora sedute. L'importo incassato
+ * si ricalcola (vedi amountAfterPackageChange).
+ */
+export function setItemPackage(input: {
+  appointmentId: string;
+  itemId: string;
+  clientPackageId: string | null;
+}): Promise<AgendaResult<{ amountCollectedCents: number }>> {
+  return locked<{ amountCollectedCents: number }>(async (tx) => {
+    const appt = await tx.appointment.findUnique({
+      where: { id: input.appointmentId },
+      select: {
+        id: true,
+        clientId: true,
+        status: true,
+        doneAt: true,
+        amountCollectedCents: true,
+        items: { select: { id: true, priceCents: true, clientPackageId: true, serviceId: true, service: { select: { categoryId: true } } } },
+      },
+    });
+    if (!appt) return { ok: false, error: NOT_FOUND };
+    if (appt.status !== "CONFIRMED" || !appt.doneAt) {
+      return { ok: false, error: "Si può scalare da un pacchetto solo un appuntamento segnato come Fatto." };
+    }
+    const item = appt.items.find((i) => i.id === input.itemId);
+    if (!item) return { ok: false, error: "Voce non trovata." };
+
+    if (input.clientPackageId) {
+      // Sedute rimaste senza le voci di questo appuntamento, meno quelle usate dalle ALTRE sue voci.
+      const packages = (await loadOfferPackages([appt.clientId], [appt.id], tx)).get(appt.clientId) ?? [];
+      const others = appt.items.filter((i) => i.id !== item.id);
+      const adjusted = packages.map((p) => ({
+        ...p,
+        remainingSessions: p.remainingSessions - others.filter((o) => o.clientPackageId === p.id).length,
+      }));
+      const offer = itemOffers(
+        [{ id: item.id, serviceId: item.serviceId, categoryId: item.service?.categoryId ?? null, clientPackageId: null }],
+        adjusted,
+      )[0];
+      if (!offer?.packages.some((p) => p.id === input.clientPackageId)) return { ok: false, error: PACKAGE_NOT_AVAILABLE };
+    }
+
+    const before = collectableCents(appt.items);
+    const after = collectableCents(appt.items.map((i) => (i.id === item.id ? { ...i, clientPackageId: input.clientPackageId } : i)));
+    const amountCollectedCents = amountAfterPackageChange(appt.amountCollectedCents, before, after);
+    await tx.appointmentItem.update({ where: { id: item.id }, data: { clientPackageId: input.clientPackageId } });
+    await tx.appointment.update({ where: { id: appt.id }, data: { amountCollectedCents } });
     return { ok: true, amountCollectedCents };
   });
 }

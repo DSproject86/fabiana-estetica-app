@@ -247,7 +247,53 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
   torna al centesimo; un incasso senza voci pagate va in "Extra"). Conteggi di Fatti, Non presentate e Annullati.
 - **Grafico:** barre impilate in CSS, colori `brand.chart` (verificati per daltonismo e contrasto), tabella dei giorni.
 
+## Decisioni prese (step 8a: pacchetti e clienti)
+
+- **Migrazione `20261008000000_pacchetti_clienti`** (solo aggiunte): `Client.anonymizedAt`, `categoryId` facoltativo su
+  `PackageTemplate` e `ClientPackage`, `Settings.showAllergyNotes` (default spento), indice su `ClientPackage.closedAt`
+  e vincoli scritti a mano: servizio **oppure** categoria (al massimo uno), sedute > 0, `sessionsUsedBefore` tra 0 e le
+  sedute, prezzo ≥ 0, pagamenti > 0.
+- **Conti di un pacchetto** (`src/lib/packages/rules.ts`): sedute usate = `sessionsUsedBefore` + voci collegate
+  (`AppointmentItem.clientPackageId`); pagato = somma dei pagamenti; residuo = prezzo − pagato. "Completato" = sedute
+  finite; se resta un residuo compare l'avviso "sedute finite ma restano X € da pagare" (elenco, dettaglio, archiviazione).
+- **Validità:** un pacchetto vale per un servizio o per un'intera categoria (menu "Valido per", anche nel listino).
+  Senza servizio/categoria non si scala dall'agenda.
+- **Vendita:** dalla scheda cliente o da Pacchetti → "+ Vendi"; dal listino (campi precompilati e modificabili) o
+  personalizzato; sedute già fatte prima dell'app; acconto facoltativo (data, importo, contanti/carta, nota).
+- **Pagamenti:** aggiungi, modifica, elimina (con conferma). Data non nel futuro. Un pagamento che supera il residuo è
+  rifiutato (anche l'acconto oltre il prezzo). Le statistiche li contano per `paidOn`, come allo step 7.
+- **Modifica pacchetto:** sedute e prezzo non scendono sotto quanto già usato e pagato. **Elimina** solo se non ha
+  pagamenti né sedute scalate; altrimenti **Archivia** (`closedAt`, sempre con conferma) e **Riapri**.
+- **Scalare le sedute (agenda):** il collegamento esiste solo sugli appuntamenti Fatti.
+  - Alla spunta "Fatto", ogni voce coperta da **un solo** pacchetto attivo della cliente con sedute rimaste si scala
+    subito (se più voci puntano allo stesso pacchetto, finché ci sono sedute); l'importo precompilato le esclude.
+  - Nel riquadro "Incassato": spunta "Scala dal pacchetto X (3 di 5 rimaste)" se il pacchetto possibile è uno, menu
+    (Non scalare / pacchetto A / pacchetto B) se sono più di uno. Si salva subito.
+  - Importo dopo scala/togli: se non era stato toccato diventa il nuovo precompilato; se era stato corretto a mano
+    (sconto, extra) si sposta della differenza, mai sotto zero.
+  - Togliere la spunta Fatto o annullare l'appuntamento scollega le voci nella stessa transazione (la seduta torna).
+  - Tutto sotto `withBookingLock`, con ricontrollo di cliente, copertura, pacchetto attivo e sedute rimaste: due tocchi
+    insieme sull'ultima seduta ne scalano una sola.
+- **Pagina Pacchetti:** Attivi · Con residuo da pagare (anche archiviati: un residuo non deve sparire) · Archiviati,
+  con totale da incassare.
+- **Clienti:** elenco per cognome con ricerca (nome, cognome, cellulare, email), 50 per pagina, "+ Nuova". Scheda:
+  contatti, WhatsApp, email (`mailto`), nuovo appuntamento, modifica dati (email unica), note, totale speso (incassi
+  dei Fatti + pagamenti dei pacchetti), numero di Fatti e di non presentate, pacchetti (archiviati a parte), storico
+  appuntamenti (ultimi 100). Dall'agenda il nome della cliente porta alla scheda.
+- **Blocca:** `blockedAt`, `sessionVersion` +1 (esce subito) e codici di accesso cancellati. Gli appuntamenti restano.
+- **Note allergie:** visibili (agenda, nuovo appuntamento, scheda, modifica) solo con "Mostra note allergie" acceso in
+  Impostazioni → Schede clienti. Spento, il campo non è nel modulo e il dato salvato non si tocca.
+- **Elimina cliente (privacy)**, confermando col cognome; rifiutata se ha appuntamenti futuri confermati.
+  - Senza appuntamenti né pacchetti: cancellata davvero.
+  - Con uno storico: anonimizzata ("Cliente eliminata", `anonymizedAt`): via nome, cellulare, email, note, allergie,
+    consenso, ultimo accesso e codici; svuotate le note di appuntamenti, pacchetti e pagamenti. Restano date, servizi e
+    importi (statistiche invariate). Non compare più in elenco e ricerca, non si può modificare né prenotare.
+  - In entrambi i casi il destinatario nel registro invii diventa "cliente eliminata".
+- **Lato cliente:** in "I miei appuntamenti" il riquadro dei pacchetti attivi (sedute rimaste e residuo da pagare).
+
 ## Da fare prima del lancio
 
-- Informativa privacy definitiva (ora `/privacy` ha un testo provvisorio; aggiornare anche `PRIVACY_VERSION`).
+- **Privacy definitiva + dati titolare + consenso dati sanitari** (prima di invitare le clienti vere): testo definitivo
+  di `/privacy` (ora provvisorio), dati del titolare (nome, indirizzo, P.IVA, email), consenso per le note allergie
+  (dati sanitari) e nuova `PRIVACY_VERSION`.
 - ~~Dominio verificato su Resend e `EMAIL_FROM` con quel dominio.~~ Fatto allo step 6 (fabianaestetica.it).

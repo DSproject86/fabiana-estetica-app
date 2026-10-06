@@ -53,3 +53,10 @@ export async function setAdminNotifyAction(adminId: string, enabled: boolean): P
   await prisma.admin.updateMany({ where: { id: adminId }, data: { notifyNewBooking: enabled } });
   revalidatePath("/admin/impostazioni");
 }
+
+/** "Mostra note allergie" (agenda e scheda cliente). Spenta, il dato resta nel database. */
+export async function setShowAllergyNotesAction(enabled: boolean): Promise<void> {
+  await requireAdmin();
+  await prisma.settings.upsert({ where: { id: 1 }, create: { id: 1, showAllergyNotes: enabled }, update: { showAllergyNotes: enabled } });
+  revalidatePath("/admin", "layout");
+}

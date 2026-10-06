@@ -5,13 +5,28 @@ import { useOptimistic, useState, useTransition } from "react";
 import { WhatsAppButton } from "@/components/admin/WhatsAppButton";
 import type { AgendaState } from "@/lib/agenda/rules";
 import { centsToInput, formatEuro } from "@/lib/money";
-import { cancelAppointmentAction, saveAmountAction, toggleDoneAction, toggleNoShowAction } from "../actions";
+import {
+  cancelAppointmentAction,
+  saveAmountAction,
+  setItemPackageAction,
+  toggleDoneAction,
+  toggleNoShowAction,
+} from "../actions";
 
 export type CardData = {
   id: string;
   timeRange: string;
   clientName: string;
+  clientId: string;
+  /** null se l'impostazione "Mostra note allergie" è spenta. */
   allergyNotes: string | null;
+  /** Voci che si possono scalare da un pacchetto della cliente (solo sugli appuntamenti Fatti). */
+  packageChoices: {
+    itemId: string;
+    itemName: string;
+    linkedPackageId: string | null;
+    options: { id: string; name: string; offerLabel: string; linkedLabel: string }[];
+  }[];
   services: string;
   totalCents: number;
   /** Totale senza le voci scalate da un pacchetto (importo precompilato alla spunta "Fatto"). */
@@ -26,7 +41,8 @@ export type CardData = {
   online: boolean;
   hasEmail: boolean;
   notifyDefault: boolean;
-  whatsapp: { confirm: string; reminder: string };
+  /** null per le clienti senza cellulare (eliminate per la privacy). */
+  whatsapp: { confirm: string; reminder: string } | null;
 };
 
 type Panel = null | "amount" | "more" | "cancel";
@@ -38,6 +54,11 @@ export function AppointmentCard({ a }: { a: CardData }) {
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState(a.amountCents !== null ? centsToInput(a.amountCents) : centsToInput(a.prefillCents));
   const [notify, setNotify] = useState(a.notifyDefault);
+  const [choices, setOptimisticChoice] = useOptimistic(
+    a.packageChoices,
+    (current, change: { itemId: string; packageId: string | null }) =>
+      current.map((c) => (c.itemId === change.itemId ? { ...c, linkedPackageId: change.packageId } : c)),
+  );
 
   const done = state === "done";
   const noShow = state === "noShow";
@@ -94,7 +115,12 @@ export function AppointmentCard({ a }: { a: CardData }) {
               <span className="rounded-full bg-prugna/10 px-2 py-0.5 text-xs font-medium">Non presentata</span>
             ) : null}
           </div>
-          <span className={`font-medium ${done ? "line-through" : ""}`}>{a.clientName}</span>
+          <Link
+            href={`/admin/clienti/${a.clientId}`}
+            className={`w-fit font-medium underline-offset-2 hover:underline ${done ? "line-through" : ""}`}
+          >
+            {a.clientName}
+          </Link>
           {a.allergyNotes ? <span className="text-xs text-red-800">Allergie: {a.allergyNotes}</span> : null}
           <span className={`text-sm text-prugna/70 ${done ? "line-through" : ""}`}>{a.services}</span>
           <span className="text-sm tabular-nums">
@@ -153,11 +179,25 @@ export function AppointmentCard({ a }: { a: CardData }) {
             Totale {formatEuro(a.prefillCents)}
             {a.packageItems > 0 ? " (escluse le voci da pacchetto)" : ""}: cambialo per sconti o extra.
           </span>
+          {choices.length > 0 ? (
+            <PackageChoices
+              choices={choices}
+              disabled={pending}
+              onChange={(itemId, packageId) =>
+                run(async () => {
+                  setOptimisticChoice({ itemId, packageId });
+                  const result = await setItemPackageAction(a.id, itemId, packageId);
+                  if (result.amountCents !== undefined) setAmount(centsToInput(result.amountCents));
+                  return result;
+                })
+              }
+            />
+          ) : null}
         </form>
       ) : null}
 
       <div className={`flex flex-wrap items-center gap-2 ${a.canOutcome && !noShow ? "ml-10" : ""}`}>
-        {state === "confirmed" ? (
+        {state === "confirmed" && a.whatsapp ? (
           <>
             <WhatsAppButton compact href={a.whatsapp.confirm} label="Conferma" />
             <WhatsAppButton compact href={a.whatsapp.reminder} label="Promemoria" />
@@ -258,6 +298,67 @@ export function AppointmentCard({ a }: { a: CardData }) {
         </p>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * "Scala dal pacchetto" per ogni voce coperta: spunta se c'è un solo pacchetto possibile, menu se ce ne
+ * sono di più. Si salva subito e l'importo incassato si ricalcola.
+ */
+function PackageChoices({
+  choices,
+  disabled,
+  onChange,
+}: {
+  choices: CardData["packageChoices"];
+  disabled: boolean;
+  onChange: (itemId: string, packageId: string | null) => void;
+}) {
+  return (
+    <fieldset className="flex basis-full flex-col gap-2 border-t border-salvia/40 pt-2">
+      <legend className="sr-only">Sedute da pacchetto</legend>
+      {choices.map((c) => {
+        const linked = c.options.find((o) => o.id === c.linkedPackageId);
+        if (c.options.length === 1) {
+          const o = c.options[0];
+          return (
+            <label key={c.itemId} className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={!!linked}
+                disabled={disabled}
+                onChange={(e) => onChange(c.itemId, e.target.checked ? o.id : null)}
+                className="mt-0.5 size-5 shrink-0 accent-[var(--color-salvia)]"
+              />
+              <span>
+                <span className="font-medium">{c.itemName}</span>: {linked ? o.linkedLabel : o.offerLabel}
+              </span>
+            </label>
+          );
+        }
+        return (
+          <label key={c.itemId} className="flex flex-col gap-1 text-sm">
+            <span>
+              <span className="font-medium">{c.itemName}</span>
+              {linked ? <span className="text-prugna/70">: {linked.linkedLabel}</span> : null}
+            </span>
+            <select
+              value={c.linkedPackageId ?? ""}
+              disabled={disabled}
+              onChange={(e) => onChange(c.itemId, e.target.value || null)}
+              className="min-h-11 rounded-xl border border-prugna/15 bg-white px-3 text-base"
+            >
+              <option value="">Non scalare (pagata a parte)</option>
+              {c.options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.offerLabel.replace("Scala dal pacchetto ", "")}
+                </option>
+              ))}
+            </select>
+          </label>
+        );
+      })}
+    </fieldset>
   );
 }
 

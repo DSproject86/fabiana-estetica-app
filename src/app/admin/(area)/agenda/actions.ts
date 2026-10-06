@@ -10,6 +10,7 @@ import {
   rescheduleAppointment,
   setAmountCollected,
   setDone,
+  setItemPackage,
   setNoShow,
   updateAppointmentServices,
 } from "@/lib/agenda/mutations";
@@ -34,6 +35,8 @@ function refresh() {
   revalidatePath("/admin/agenda", "layout");
   revalidatePath("/admin/statistiche");
   revalidatePath("/admin/promemoria");
+  revalidatePath("/admin/pacchetti", "layout");
+  revalidatePath("/admin/clienti", "layout");
 }
 
 function backToAgenda(esito: Esito, appointmentId: string, startsAt: Date, emailed: boolean): never {
@@ -67,6 +70,18 @@ export async function toggleDoneAction(
 ): Promise<{ error?: string; amountCents?: number | null }> {
   await requireAdmin();
   const result = await setDone({ appointmentId, done });
+  refresh();
+  return result.ok ? { amountCents: result.amountCollectedCents } : { error: result.error };
+}
+
+/** "Scala dal pacchetto" su una voce di un appuntamento Fatto (null = non scalare). */
+export async function setItemPackageAction(
+  appointmentId: string,
+  itemId: string,
+  clientPackageId: string | null,
+): Promise<{ error?: string; amountCents?: number }> {
+  await requireAdmin();
+  const result = await setItemPackage({ appointmentId, itemId, clientPackageId });
   refresh();
   return result.ok ? { amountCents: result.amountCollectedCents } : { error: result.error };
 }
@@ -124,7 +139,7 @@ export async function createClientAction(_prev: ClientFormState, formData: FormD
       ? { fieldErrors: result.fieldErrors, values }
       : { duplicates: result.duplicates, emailTaken: result.emailTaken, values };
   }
-  redirect(`/admin/agenda/nuovo?cliente=${result.clientId}`);
+  redirect(formData.get("dopo") === "scheda" ? `/admin/clienti/${result.clientId}` : `/admin/agenda/nuovo?cliente=${result.clientId}`);
 }
 
 // ─────────────── Nuovo appuntamento, Sposta, Servizi ───────────────

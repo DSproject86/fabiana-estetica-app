@@ -6,6 +6,8 @@ import { requireClient } from "@/lib/auth/client";
 import { loadSettings } from "@/lib/availability/queries";
 import { prisma } from "@/lib/db";
 import { formatEuro } from "@/lib/money";
+import { loadPackages, type PackageWithSummary } from "@/lib/packages/queries";
+import { remainingLabel } from "@/lib/packages/rules";
 import { dayKeyOf, formatDayLong, formatTime } from "@/lib/time/rome";
 import { whatsappChatLink } from "@/lib/whatsapp";
 
@@ -26,7 +28,7 @@ export default async function AppuntamentiPage() {
   const now = new Date();
   const include = { items: { orderBy: { sortOrder: "asc" as const }, select: { name: true } } };
 
-  const [upcoming, past, settings] = await Promise.all([
+  const [upcoming, past, settings, packages] = await Promise.all([
     prisma.appointment.findMany({
       where: { clientId: client.id, status: "CONFIRMED", startsAt: { gte: now } },
       orderBy: { startsAt: "asc" },
@@ -39,6 +41,7 @@ export default async function AppuntamentiPage() {
       include,
     }),
     loadSettings(),
+    loadPackages({ clientId: client.id, closedAt: null }),
   ]);
 
   const whatsapp = settings.businessWhatsapp
@@ -72,6 +75,8 @@ export default async function AppuntamentiPage() {
         )}
       </section>
 
+      {packages.length ? <PackagesBox packages={packages} /> : null}
+
       <div className="flex flex-col gap-3 rounded-3xl bg-cipria/15 p-5">
         <p>Per spostare o disdire un appuntamento scrivi a Fabiana.</p>
         {whatsapp ? (
@@ -95,6 +100,37 @@ export default async function AppuntamentiPage() {
         </section>
       ) : null}
     </ClientShell>
+  );
+}
+
+/** Pacchetti attivi della cliente: sedute rimaste e residuo da pagare. */
+function PackagesBox({ packages }: { packages: PackageWithSummary[] }) {
+  return (
+    <section aria-labelledby="pacchetti" className="flex flex-col gap-3">
+      <h2 id="pacchetti" className="text-xl">
+        {packages.length === 1 ? "Il tuo pacchetto" : "I tuoi pacchetti"}
+      </h2>
+      <ul className="flex flex-col gap-3">
+        {packages.map((p) => (
+          <li key={p.id} className={`${cardClass} flex flex-col gap-1`}>
+            <span className="font-medium">{p.name}</span>
+            <span className="text-sm text-prugna/70">
+              {p.summary.completed ? "Sedute finite" : `Sedute: ${remainingLabel(p.summary.remainingSessions, p.totalSessions)}`}
+            </span>
+            <span className="text-sm">
+              {p.summary.dueCents > 0 ? (
+                <>
+                  Da pagare: <strong className="font-semibold tabular-nums">{formatEuro(p.summary.dueCents)}</strong>
+                  <span className="text-prugna/60"> (pagati {formatEuro(p.summary.paidCents)} su {formatEuro(p.priceCents)})</span>
+                </>
+              ) : (
+                <span className="text-prugna/70">Pagato</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

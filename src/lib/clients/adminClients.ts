@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { normalizePhone } from "./phone";
@@ -79,29 +80,53 @@ export async function createClientByAdmin(raw: Record<string, string>, force = f
   }
 }
 
-/** Ricerca per nome, cognome, email o cellulare (ogni parola deve comparire da qualche parte). */
-export async function searchClients(q: string, take = 20) {
+/** Condizione di ricerca: ogni parola deve comparire in nome, cognome, email o cellulare. */
+function searchWhere(q: string): Prisma.ClientWhereInput {
   const words = q.trim().split(/\s+/).filter(Boolean).slice(0, 4);
+  return {
+    anonymizedAt: null,
+    AND: words.map((w) => {
+      const digits = w.replace(/\D/g, "");
+      return {
+        OR: [
+          { firstName: { contains: w, mode: "insensitive" as const } },
+          { lastName: { contains: w, mode: "insensitive" as const } },
+          { email: { contains: w, mode: "insensitive" as const } },
+          ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
+        ],
+      };
+    }),
+  };
+}
+
+/** Ricerca per nome, cognome, email o cellulare (le clienti eliminate per la privacy non compaiono). */
+export async function searchClients(q: string, take = 20) {
   const select = { ...matchSelect, blockedAt: true } as const;
-  if (words.length === 0) {
-    return prisma.client.findMany({ orderBy: { updatedAt: "desc" }, take: 8, select });
+  if (!q.trim()) {
+    return prisma.client.findMany({ where: { anonymizedAt: null }, orderBy: { updatedAt: "desc" }, take: 8, select });
   }
   return prisma.client.findMany({
-    where: {
-      AND: words.map((w) => {
-        const digits = w.replace(/\D/g, "");
-        return {
-          OR: [
-            { firstName: { contains: w, mode: "insensitive" as const } },
-            { lastName: { contains: w, mode: "insensitive" as const } },
-            { email: { contains: w, mode: "insensitive" as const } },
-            ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
-          ],
-        };
-      }),
-    },
+    where: searchWhere(q),
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     take,
     select,
   });
+}
+
+export const CLIENTS_PAGE_SIZE = 50;
+
+/** Elenco clienti (pagina "Clienti"): in ordine di cognome, a pagine. */
+export async function listClients(q: string, page: number) {
+  const where = searchWhere(q);
+  const [total, clients] = await Promise.all([
+    prisma.client.count({ where }),
+    prisma.client.findMany({
+      where,
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { createdAt: "asc" }],
+      skip: (page - 1) * CLIENTS_PAGE_SIZE,
+      take: CLIENTS_PAGE_SIZE,
+      select: { ...matchSelect, blockedAt: true, _count: { select: { packages: { where: { closedAt: null } } } } },
+    }),
+  ]);
+  return { total, clients, pages: Math.max(1, Math.ceil(total / CLIENTS_PAGE_SIZE)) };
 }

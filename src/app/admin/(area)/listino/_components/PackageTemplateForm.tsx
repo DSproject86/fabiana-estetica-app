@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { SelectField, TextField, ToggleField } from "@/components/ui/TextField";
+import { CoverageSelect, type CoverageGroup } from "@/components/admin/CoverageSelect";
+import { TextField, ToggleField } from "@/components/ui/TextField";
 import type { FormState } from "@/lib/listino/validation";
 import { FormActions, FormError } from "./FormActions";
 
@@ -9,18 +10,18 @@ export type PackageTemplateInitial = {
   name: string;
   sessions: string;
   price: string;
-  serviceId: string;
+  coverage: string;
   active: boolean;
 };
 
 export function PackageTemplateForm({
   action,
-  services,
+  coverage,
   initial,
   submitLabel,
 }: {
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
-  services: { id: string; label: string }[];
+  coverage: CoverageGroup[];
   initial: PackageTemplateInitial;
   submitLabel: string;
 }) {
@@ -63,21 +64,7 @@ export function PackageTemplateForm({
           required
         />
       </div>
-      <SelectField
-        id="serviceId"
-        name="serviceId"
-        label="Servizio delle sedute (facoltativo)"
-        hint="Il trattamento a cui valgono le sedute: servirà per collegare il pacchetto agli appuntamenti."
-        defaultValue={v?.serviceId ?? initial.serviceId}
-        error={e?.serviceId}
-      >
-        <option value="">Nessuno</option>
-        {services.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.label}
-          </option>
-        ))}
-      </SelectField>
+      <CoverageSelect groups={coverage} defaultValue={v?.coverage ?? initial.coverage} error={e?.coverage} />
       <ToggleField
         id="active"
         name="active"

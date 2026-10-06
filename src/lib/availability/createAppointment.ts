@@ -149,8 +149,9 @@ export async function createAppointment(input: {
 
   try {
     return await withBookingLock(async (tx): Promise<CreateAppointmentResult> => {
-      const client = await tx.client.findUnique({ where: { id: clientId }, select: { id: true, blockedAt: true } });
-      if (!client) return { ok: false, code: "INVALID", error: "Cliente non trovata." };
+      const client = await tx.client.findUnique({ where: { id: clientId }, select: { id: true, blockedAt: true, anonymizedAt: true } });
+      // Una cliente eliminata per la privacy resta solo per le statistiche.
+      if (!client || client.anonymizedAt) return { ok: false, code: "INVALID", error: "Cliente non trovata." };
       if (actor === "CLIENT" && client.blockedAt) {
         return { ok: false, code: "INVALID", error: "Non è possibile prenotare online. Contatta Fabiana." };
       }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseEuroToCents } from "@/lib/money";
+import { decodeCoverage } from "@/lib/packages/rules";
 
 /** Stato restituito dai moduli: errore generale, errori per campo e valori digitati. */
 export type FormState = {
@@ -36,11 +37,6 @@ const checkbox = z
   .optional()
   .transform((v) => v === "on");
 
-const optionalId = z
-  .string()
-  .optional()
-  .transform((v) => (v ? v : null));
-
 export const categorySchema = z.object({
   name,
   active: checkbox,
@@ -64,7 +60,18 @@ export const packageTemplateSchema = z.object({
   name,
   sessions: intInRange(1, 100, "Numero di sedute tra 1 e 100."),
   price,
-  serviceId: optionalId,
+  // "s:<id>" servizio, "c:<id>" categoria intera, "" nessuno
+  coverage: z
+    .string()
+    .optional()
+    .transform((v, ctx) => {
+      const decoded = decodeCoverage(v ?? "");
+      if (!decoded) {
+        ctx.addIssue({ code: "custom", message: "Scelta non valida." });
+        return z.NEVER;
+      }
+      return decoded;
+    }),
   active: checkbox,
 });
 

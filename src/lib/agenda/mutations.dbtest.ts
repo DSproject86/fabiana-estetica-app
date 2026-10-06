@@ -273,18 +273,21 @@ describe("annulla un appuntamento Fatto", () => {
 describe("Fatto e importo", () => {
   it("precompila il totale senza le voci da pacchetto; reversibile; importo modificabile", async () => {
     const id = await book("2026-10-06", h(9), { serviceIds: [ids.viso, ids.peeling] }); // 45 + 20
-    const appt = await get(id);
-    const pkg = await prisma.clientPackage.create({ data: { clientId: ids.maria, name: "Peeling x5", priceCents: 8000, totalSessions: 5 } });
-    await prisma.appointmentItem.update({ where: { id: appt.items[1].id }, data: { clientPackageId: pkg.id } });
+    // Unico pacchetto attivo che copre il peeling: alla spunta la voce si scala da sola.
+    const pkg = await prisma.clientPackage.create({
+      data: { clientId: ids.maria, name: "Peeling x5", priceCents: 8000, totalSessions: 5, serviceId: ids.peeling },
+    });
 
-    expect(await setDone({ appointmentId: id, done: true, now: NOW })).toEqual({ ok: true, amountCollectedCents: 4500 });
-    expect(await setDone({ appointmentId: id, done: true, now: NOW })).toEqual({ ok: true, amountCollectedCents: 4500 }); // doppio tocco
+    expect(await setDone({ appointmentId: id, done: true, now: NOW })).toEqual({ ok: true, amountCollectedCents: 4500, linkedItems: 1 });
+    expect((await get(id)).items.map((i) => i.clientPackageId)).toEqual([null, pkg.id]);
+    expect(await setDone({ appointmentId: id, done: true, now: NOW })).toEqual({ ok: true, amountCollectedCents: 4500, linkedItems: 1 }); // doppio tocco
     expect(await setAmountCollected({ appointmentId: id, cents: 4000 })).toEqual({ ok: true });
     expect((await get(id)).amountCollectedCents).toBe(4000);
 
     expect(await setDone({ appointmentId: id, done: false, now: NOW })).toMatchObject({ ok: true });
     const undone = await get(id);
     expect([undone.doneAt, undone.amountCollectedCents]).toEqual([null, null]);
+    expect(undone.items.every((i) => i.clientPackageId === null)).toBe(true); // la seduta torna nel pacchetto
     expect((await setAmountCollected({ appointmentId: id, cents: 100 })).ok).toBe(false);
   });
 

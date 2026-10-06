@@ -7,13 +7,14 @@ import { formatPhone } from "@/lib/clients/phone";
 import { createClientAction, type ClientFormState } from "../actions";
 
 /** Nuova cliente al volo (email facoltativa). Se esiste già, propone di scegliere quella. */
-export function NewClientForm() {
+export function NewClientForm({ context = "agenda" }: { context?: "agenda" | "clienti" }) {
   const [state, formAction, pending] = useActionState<ClientFormState, FormData>(createClientAction, {});
   const errors = state.fieldErrors ?? {};
   const values = state.values;
 
   return (
     <form action={formAction} className="flex flex-col gap-4 rounded-2xl bg-white p-4 ring-1 ring-prugna/5">
+      {context === "clienti" ? <input type="hidden" name="dopo" value="scheda" /> : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField id="firstName" name="firstName" label="Nome" autoComplete="off" defaultValue={values?.firstName} error={errors.firstName} required />
         <TextField id="lastName" name="lastName" label="Cognome" autoComplete="off" defaultValue={values?.lastName} error={errors.lastName} required />
@@ -39,7 +40,10 @@ export function NewClientForm() {
           <ul className="flex flex-col gap-1">
             {state.duplicates.map((c) => (
               <li key={c.id}>
-                <Link href={`/admin/agenda/nuovo?cliente=${c.id}`} className="font-medium underline underline-offset-2">
+                <Link
+                  href={context === "clienti" ? `/admin/clienti/${c.id}` : `/admin/agenda/nuovo?cliente=${c.id}`}
+                  className="font-medium underline underline-offset-2"
+                >
                   {c.firstName} {c.lastName}
                 </Link>{" "}
                 <span className="text-prugna/60">
@@ -62,7 +66,7 @@ export function NewClientForm() {
         disabled={pending}
         className="inline-flex min-h-12 items-center justify-center rounded-full bg-prugna px-6 font-medium text-avorio disabled:opacity-60"
       >
-        {pending ? "Attendi…" : "Crea e continua"}
+        {pending ? "Attendi…" : context === "clienti" ? "Crea cliente" : "Crea e continua"}
       </button>
     </form>
   );

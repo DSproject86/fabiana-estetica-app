@@ -5,6 +5,7 @@ import { formatPhone } from "@/lib/clients/phone";
 import { appBaseUrl, getActiveInvite } from "@/lib/invite/invite";
 import { dayKeyOf, formatDayShort } from "@/lib/time/rome";
 import { AdminNotifyToggles } from "./AdminNotifyToggles";
+import { AllergyToggle } from "./AllergyToggle";
 import { ContactsForm } from "./ContactsForm";
 import { InviteLinkCard } from "./InviteLinkCard";
 import { SettingsForm } from "./SettingsForm";
@@ -49,6 +50,11 @@ export default async function ImpostazioniPage() {
           businessAddress={settings.businessAddress ?? ""}
         />
         <AdminNotifyToggles admins={admins} />
+      </section>
+
+      <section aria-labelledby="schede" className="flex flex-col gap-3">
+        <h2 id="schede" className="text-xl">Schede clienti</h2>
+        <AllergyToggle enabled={settings.showAllergyNotes} />
       </section>
 
       <section aria-labelledby="messaggi" className="flex flex-col gap-3">

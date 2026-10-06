@@ -24,7 +24,15 @@ export const agendaAppointmentSelect = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, allergyNotes: true } },
   items: {
     orderBy: { sortOrder: "asc" },
-    select: { id: true, serviceId: true, name: true, durationMin: true, priceCents: true, clientPackageId: true },
+    select: {
+      id: true,
+      serviceId: true,
+      name: true,
+      durationMin: true,
+      priceCents: true,
+      clientPackageId: true,
+      service: { select: { categoryId: true } },
+    },
   },
 } satisfies Prisma.AppointmentSelect;
 

@@ -72,6 +72,8 @@ manda doppioni. Si ferma da solo dopo ~45 s e risponde con un riepilogo JSON (`s
 - `src/lib/notifications/`: testi e segnaposto, grafica delle email, `.ics`, invio con registro
   (`deliver.ts`), conferme/modifiche/cancellazioni, promemoria e link WhatsApp
 - `src/app/api/cron/promemoria/`: endpoint del promemoria
+- `src/lib/packages/`: pacchetti delle clienti (conti, pagamenti, sedute scalate dall'agenda)
+- `src/lib/clients/`: ricerca, scheda, blocco ed eliminazione (privacy) delle clienti
 - `src/lib/auth/`: sessioni con cookie firmato, password, controlli d'accesso
 - `src/proxy.ts`: primo filtro sulle pagine `/admin`, `/prenota` e `/appuntamenti`
 - `prisma/`: schema, migrazioni, seed

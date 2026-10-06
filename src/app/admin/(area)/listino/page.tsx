@@ -35,7 +35,7 @@ export default async function ListinoPage() {
     }),
     prisma.packageTemplate.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      include: { service: { select: { name: true } } },
+      include: { service: { select: { name: true } }, category: { select: { name: true } } },
     }),
   ]);
 
@@ -153,7 +153,7 @@ export default async function ListinoPage() {
                   </span>
                   <span className="text-sm text-prugna/60">
                     {t.sessions} sedute · {formatEuro(t.priceCents)}
-                    {t.service ? ` · ${t.service.name}` : ""}
+                    {t.service ? ` · ${t.service.name}` : t.category ? ` · ${t.category.name} (tutta la categoria)` : ""}
                   </span>
                 </Link>
                 <MoveButtons

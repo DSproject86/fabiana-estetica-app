@@ -2,22 +2,23 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { centsToInput } from "@/lib/money";
+import { encodeCoverage } from "@/lib/packages/rules";
 import { DeleteButton } from "../../_components/DeleteButton";
 import { PackageTemplateForm } from "../../_components/PackageTemplateForm";
 import { SubPageHeader } from "../../_components/SubPageHeader";
-import { serviceOptions } from "../../_components/service-options";
+import { coverageOptions } from "@/lib/packages/queries";
 import { deletePackageTemplate, updatePackageTemplate } from "../../actions";
 
 export const metadata: Metadata = { title: "Modifica pacchetto" };
 
 export default async function ModificaPacchettoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [template, services] = await Promise.all([
+  const [template, coverage] = await Promise.all([
     prisma.packageTemplate.findUnique({
       where: { id },
       include: { _count: { select: { clientPackages: true } } },
     }),
-    serviceOptions(),
+    coverageOptions(),
   ]);
   if (!template) notFound();
 
@@ -26,12 +27,12 @@ export default async function ModificaPacchettoPage({ params }: { params: Promis
       <SubPageHeader title="Modifica pacchetto" />
       <PackageTemplateForm
         action={updatePackageTemplate.bind(null, template.id)}
-        services={services}
+        coverage={coverage}
         initial={{
           name: template.name,
           sessions: String(template.sessions),
           price: centsToInput(template.priceCents),
-          serviceId: template.serviceId ?? "",
+          coverage: encodeCoverage(template),
           active: template.active,
         }}
         submitLabel="Salva modifiche"

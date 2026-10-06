@@ -52,6 +52,7 @@ model Client {
   inviteLinkId      String?
   inviteLink        InviteLink?  @relation(fields: [inviteLinkId], references: [id], onDelete: SetNull)
   blockedAt         DateTime?    @db.Timestamptz(3)
+  anonymizedAt      DateTime?    @db.Timestamptz(3) // "elimina cliente" (privacy) con storico: dati personali cancellati
   allergyNotes      String? // solo admin
   adminNotes        String? // solo admin
   sessionVersion    Int          @default(0)
@@ -89,8 +90,12 @@ model ServiceCategory {
   sortOrder Int       @default(0)
   active    Boolean   @default(true)
   services  Service[]
-  createdAt DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+
+  packageTemplates PackageTemplate[]
+  clientPackages   ClientPackage[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 }
 
 model Service {
@@ -113,18 +118,21 @@ model Service {
   @@index([categoryId, sortOrder])
 }
 
-// Pacchetti a listino (es. "10 massaggi"), da cui si crea il pacchetto della cliente
+// Pacchetti a listino (es. "10 massaggi"), da cui si crea il pacchetto della cliente.
+// Le sedute valgono per un servizio OPPURE per un'intera categoria (al massimo uno dei due: CHECK nella migrazione).
 model PackageTemplate {
-  id         String   @id @default(cuid())
+  id         String           @id @default(cuid())
   name       String
   sessions   Int
   priceCents Int
   serviceId  String? // servizio a cui valgono le sedute (facoltativo)
-  service    Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  active     Boolean  @default(true)
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+  service    Service?         @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  categoryId String? // oppure tutti i servizi di una categoria
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  active     Boolean          @default(true)
+  sortOrder  Int              @default(0)
+  createdAt  DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime         @updatedAt @db.Timestamptz(3)
 
   clientPackages ClientPackage[]
 }
@@ -245,8 +253,10 @@ model ClientPackage {
   client             Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
   templateId         String?
   template           PackageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  serviceId          String?
+  serviceId          String? // sedute valide per questo servizio…
   service            Service?         @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  categoryId         String? // …oppure per tutti i servizi di questa categoria (al massimo uno dei due)
+  category           ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   name               String
   priceCents         Int
   totalSessions      Int
@@ -260,6 +270,7 @@ model ClientPackage {
   items    AppointmentItem[]
 
   @@index([clientId])
+  @@index([closedAt])
 }
 
 model PackagePayment {
@@ -288,6 +299,7 @@ model Settings {
   reminderHour         Int      @default(18)
   businessWhatsapp     String? // cellulare di Fabiana (+39…) per i link wa.me delle clienti
   businessAddress      String? // indirizzo dello studio (email e .ics)
+  showAllergyNotes     Boolean  @default(false) // mostra le note allergie (agenda, scheda cliente)
   updatedAt            DateTime @updatedAt @db.Timestamptz(3)
 }
 

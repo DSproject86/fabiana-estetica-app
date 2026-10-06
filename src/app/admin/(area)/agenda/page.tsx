@@ -21,7 +21,10 @@ import {
   treatmentEndOf,
 } from "@/lib/agenda/rules";
 import { addMonthsToMonth, formatMonth, monthOf, monthRange } from "@/lib/booking/calendar";
+import { loadSettings } from "@/lib/availability/queries";
 import { formatEuro } from "@/lib/money";
+import { loadOfferPackages } from "@/lib/packages/queries";
+import { packageChoices, remainingLabel } from "@/lib/packages/rules";
 import { loadWhatsappLinkBuilder } from "@/lib/notifications/whatsappLinks";
 import { addDays, dayKeyOf, formatDayLong, formatTime, todayKey } from "@/lib/time/rome";
 import type { CardData } from "./_components/AppointmentCard";
@@ -58,18 +61,56 @@ export default async function AgendaPage({ searchParams }: { searchParams: Searc
   const earlierTo = addDays(today, -1);
   const hasEarlierDays = !unmarkedView && month === monthOf(today) && today > monthFirst;
 
-  const [agendaDays, whatsappLink, outcome, earlier] = await Promise.all([
+  const [agendaDays, whatsappLink, outcome, earlier, settings] = await Promise.all([
     loadAgendaDays(days),
     loadWhatsappLinkBuilder(),
     esitoId && ESITI[esito as keyof typeof ESITI] ? loadAgendaAppointment(esitoId) : null,
     hasEarlierDays && range.partial ? loadEarlierSummary(earlierFrom, earlierTo) : null,
+    loadSettings(),
   ]);
+
+  // "Scala dal pacchetto": pacchetti attivi delle clienti con appuntamenti Fatti in vista. Le sedute rimaste
+  // si contano senza gli appuntamenti in vista, poi per ogni card si tolgono quelle degli ALTRI in vista.
+  const doneInView = agendaDays.flatMap((d) => d.appointments).filter((a) => agendaState(a) === "done");
+  const offers = await loadOfferPackages(
+    doneInView.map((a) => a.client.id),
+    doneInView.map((a) => a.id),
+  );
+  const linkedInView = new Map<string, number>();
+  for (const a of doneInView) {
+    for (const i of a.items) if (i.clientPackageId) linkedInView.set(i.clientPackageId, (linkedInView.get(i.clientPackageId) ?? 0) + 1);
+  }
+  const choicesFor = (a: AgendaAppointment): CardData["packageChoices"] => {
+    if (agendaState(a) !== "done") return [];
+    const own = (pkgId: string) => a.items.filter((i) => i.clientPackageId === pkgId).length;
+    const packages = (offers.get(a.client.id) ?? []).map((p) => ({
+      ...p,
+      remainingSessions: p.remainingSessions - ((linkedInView.get(p.id) ?? 0) - own(p.id)),
+    }));
+    const items = a.items.map((i) => ({ id: i.id, serviceId: i.serviceId, categoryId: i.service?.categoryId ?? null, clientPackageId: i.clientPackageId }));
+    return packageChoices(items, packages).map((c) => {
+      const item = a.items.find((i) => i.id === c.itemId)!;
+      return {
+        itemId: c.itemId,
+        itemName: item.name,
+        linkedPackageId: c.linkedPackageId,
+        options: c.options.map((o) => ({
+          id: o.id,
+          offerLabel: `Scala dal pacchetto ${o.name} (${remainingLabel(o.remainingWithoutThis, o.totalSessions)})`,
+          linkedLabel: `Scalata dal pacchetto ${o.name} (${remainingLabel(Math.max(0, o.remainingWithoutThis - 1), o.totalSessions)})`,
+          name: o.name,
+        })),
+      };
+    });
+  };
 
   const toCard = (a: AgendaAppointment): CardData => ({
     id: a.id,
     timeRange: `${formatTime(a.startsAt)}–${formatTime(treatmentEndOf(a))}`,
     clientName: `${a.client.firstName} ${a.client.lastName}`,
-    allergyNotes: a.client.allergyNotes,
+    clientId: a.client.id,
+    allergyNotes: settings.showAllergyNotes ? a.client.allergyNotes : null,
+    packageChoices: choicesFor(a),
     services: a.items.map((i) => i.name).join(" · "),
     totalCents: a.totalPriceCents,
     prefillCents: collectableCents(a.items),
@@ -83,7 +124,7 @@ export default async function AgendaPage({ searchParams }: { searchParams: Searc
     online: a.createdBy === "CLIENT",
     hasEmail: !!a.client.email,
     notifyDefault: notifyByDefault(a.startsAt, a.client.email, now),
-    whatsapp: { confirm: whatsappLink("BOOKING_CONFIRMED", a), reminder: whatsappLink("REMINDER", a) },
+    whatsapp: a.client.phone ? { confirm: whatsappLink("BOOKING_CONFIRMED", a), reminder: whatsappLink("REMINDER", a) } : null,
   });
 
   const banner = outcome ? ESITI[esito as keyof typeof ESITI] : null;
