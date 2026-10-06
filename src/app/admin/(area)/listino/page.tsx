@@ -114,7 +114,7 @@ export default async function ListinoPage() {
               <div className="border-t border-prugna/5 px-4 py-2">
                 <Link
                   href={`/admin/listino/servizi/nuovo?categoria=${category.id}`}
-                  className="inline-flex min-h-11 items-center text-sm font-medium text-prugna/80 hover:text-prugna"
+                  className="inline-flex min-h-11 items-center rounded-full bg-cipria/25 px-4 text-sm font-medium hover:bg-cipria/40"
                 >
                   + Aggiungi servizio
                 </Link>

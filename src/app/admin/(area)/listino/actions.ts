@@ -29,10 +29,12 @@ export async function createCategory(_prev: FormState, formData: FormData): Prom
   if ("state" in parsed) return parsed.state;
 
   const last = await prisma.serviceCategory.aggregate({ _max: { sortOrder: true } });
-  await prisma.serviceCategory.create({
+  const category = await prisma.serviceCategory.create({
     data: { ...parsed.data, sortOrder: (last._max.sortOrder ?? -1) + 1 },
   });
-  done();
+  // Categoria nuova = vuota: si passa subito al primo servizio.
+  revalidatePath(LISTINO);
+  redirect(`${LISTINO}/servizi/nuovo?categoria=${category.id}`);
 }
 
 export async function updateCategory(
