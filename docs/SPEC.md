@@ -207,6 +207,43 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
 - **Email di prova** (`NotificationLog.isTest`) all'admin collegato, coi dati di esempio e il testo salvato.
 - **`Settings.businessAddress`** facoltativo, usato in email e `.ics`.
 
+## Decisioni prese (step 7)
+
+- **Nessuna migrazione:** lo schema degli step precedenti bastava (`doneAt`, `amountCollectedCents`, `NO_SHOW`,
+  `cancelledBy`, `bufferMin`, `PackagePayment.paidOn`).
+- **Agenda** (`/admin/agenda?mese=AAAA-MM`): il mese corrente parte da oggi (link "giorni precedenti"), gli altri
+  mesi sono interi. Per giorno: fasce effettive, eccezione, blocchi e appuntamenti (ora inizio–fine senza pausa,
+  cliente, allergie, servizi, totale, WhatsApp). I giorni senza appuntamenti né blocchi stanno su una riga; gli
+  annullati sono chiusi in "N annullati · mostra".
+- **Stati:** confermato · Fatto (CONFIRMED + `doneAt`) · Non presentata (NO_SHOW) · annullato (CANCELLED).
+  Sposta, Servizi e Annulla solo su confermati non Fatti; Fatto e Non presentata dal giorno dell'appuntamento.
+- **Fatto:** un tocco salva `doneAt` e l'importo precompilato (totale senza le voci con `clientPackageId`), poi si
+  apre il riquadro per correggerlo. Togliere la spunta azzera `doneAt` e importo. "Non presentata" si ripristina solo
+  se nel frattempo l'orario non è stato occupato.
+- **"N appuntamenti passati non segnati"** (confermati, trattamento finito, né Fatti né Non presentata): avviso in
+  cima all'agenda (tutti) e nelle statistiche (quelli del mese), con link alla vista `?vista=da-segnare`.
+- **Operazioni** in `src/lib/agenda/mutations.ts`, tutte sotto `withBookingLock`; la violazione del vincolo
+  anti-sovrapposizione diventa un messaggio leggibile. Il controllo dell'orario (`checkStart`) è lo stesso di
+  `createAppointment`, con `excludeAppointmentId` (sposta/modifica) e `ignoreWorkingHours`.
+- **Admin:** niente preavviso né limite dei mesi; anche servizi nascosti. "Senza pausa" = `bufferMin` 0 (togliendolo
+  torna la pausa dell'appuntamento o quella di default). **"Fuori orario"** ignora fasce, blocchi e griglia, ora
+  scritta a mano a passi di 5 minuti, con spunta di conferma esplicita; le sovrapposizioni restano sempre vietate.
+- **Nuova cliente al volo** (`source` ADMIN, email facoltativa): con un'email già usata si deve scegliere quella
+  cliente; con un cellulare già usato si propone quella cliente ma si può "creare comunque".
+- **Sposta:** se cambia il giorno azzera `reminderEmailSentAt` e `whatsappSentAt`. **Modifica servizi:** le voci che
+  restano tengono prezzo, durata e pacchetto originali, quelle nuove prendono il listino attuale; durata ricalcolata
+  con l'arrotondamento attuale.
+- **Email:** conferma (nuovo), APPOINTMENT_CHANGED con `.ics` (sposta e servizi), APPOINTMENT_CANCELLED (annulla),
+  inviate con `after()`. Interruttore acceso di default solo se l'appuntamento è futuro e la cliente ha l'email.
+  Dopo ogni operazione l'agenda mostra un riquadro col pulsante WhatsApp del messaggio giusto
+  (conferma / spostamento / riepilogo / cancellazione).
+- **Statistiche** (`/admin/statistiche?mese=`): appuntamenti Fatti (`amountCollectedCents`, nel giorno a Roma di
+  `startsAt`) + pagamenti dei pacchetti (`paidOn`), separati e sommati; confronto col mese precedente (± € e %,
+  niente % se il mese prima era a zero). Per servizio: volte (di cui da pacchetto, che valgono 0 €) e "ha reso",
+  cioè l'incassato di ogni appuntamento diviso tra le voci pagate in proporzione al listino (resti più grandi, la somma
+  torna al centesimo; un incasso senza voci pagate va in "Extra"). Conteggi di Fatti, Non presentate e Annullati.
+- **Grafico:** barre impilate in CSS, colori `brand.chart` (verificati per daltonismo e contrasto), tabella dei giorni.
+
 ## Da fare prima del lancio
 
 - Informativa privacy definitiva (ora `/privacy` ha un testo provvisorio; aggiornare anche `PRIVACY_VERSION`).

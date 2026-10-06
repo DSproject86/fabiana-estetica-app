@@ -65,8 +65,8 @@ export const TEMPLATE_LIST: TemplateMeta[] = [
   { kind: "LOGIN_CODE", channel: "EMAIL", slug: "codice-email", label: "Codice di accesso", hint: "Il codice di 6 cifre per entrare nell'app. Deve contenere {codice}." },
   { kind: "BOOKING_CONFIRMED", channel: "WHATSAPP", slug: "conferma-whatsapp", label: "Conferma", hint: "Pulsante WhatsApp “Conferma” in agenda." },
   { kind: "REMINDER", channel: "WHATSAPP", slug: "promemoria-whatsapp", label: "Promemoria", hint: "Pulsante WhatsApp “Promemoria” in agenda e in “Promemoria di domani”." },
-  { kind: "APPOINTMENT_CHANGED", channel: "WHATSAPP", slug: "modifica-whatsapp", label: "Appuntamento spostato", hint: "Pulsante WhatsApp dopo una modifica (agenda completa, step 7)." },
-  { kind: "APPOINTMENT_CANCELLED", channel: "WHATSAPP", slug: "cancellazione-whatsapp", label: "Appuntamento cancellato", hint: "Pulsante WhatsApp dopo una cancellazione (agenda completa, step 7)." },
+  { kind: "APPOINTMENT_CHANGED", channel: "WHATSAPP", slug: "modifica-whatsapp", label: "Appuntamento spostato", hint: "Pulsante WhatsApp in agenda dopo “Sposta”." },
+  { kind: "APPOINTMENT_CANCELLED", channel: "WHATSAPP", slug: "cancellazione-whatsapp", label: "Appuntamento cancellato", hint: "Pulsante WhatsApp in agenda dopo “Annulla”." },
 ];
 
 export const templateBySlug = (slug: string) => TEMPLATE_LIST.find((t) => t.slug === slug) ?? null;

@@ -18,6 +18,11 @@ export const brand = {
     salvia: "#8FB89A", // completato
     white: "#FFFFFF",
   },
+  /** Grafici (Statistiche): toni più intensi di cipria e oro, verificati per daltonismo e contrasto su bianco. */
+  chart: {
+    appointments: "#A0526A",
+    packages: "#C08A2E",
+  },
 } as const;
 
 export type BrandColor = keyof typeof brand.colors;

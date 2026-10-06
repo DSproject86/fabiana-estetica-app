@@ -134,7 +134,7 @@ describe("avviso nuove prenotazioni agli admin", () => {
   });
 });
 
-describe("modifica e cancellazione (da collegare all'agenda allo step 7)", () => {
+describe("modifica e cancellazione", () => {
   it("modifica: .ics aggiornato con lo stesso UID e SEQUENCE più alta, riga 'Prima era'", async () => {
     const a = await setup();
     await sendBookingConfirmedEmail(a.id, new Date("2026-10-06T10:00:00Z"));

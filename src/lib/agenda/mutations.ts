@@ -1,0 +1,310 @@
+import "server-only";
+import {
+  OVERLAP_MESSAGE,
+  checkStart,
+  createAppointment,
+  isOverlapError,
+  type CreateAppointmentResult,
+} from "@/lib/availability/createAppointment";
+import { roundUpTo } from "@/lib/availability/duration";
+import { withBookingLock } from "@/lib/availability/lock";
+import { loadSettings } from "@/lib/availability/queries";
+import { loadServicesForBooking } from "@/lib/availability/services";
+import { MAX_CENTS } from "@/lib/money";
+import type { Db } from "@/lib/schedule/queries";
+import { dayKeyOf } from "@/lib/time/rome";
+import { canEdit, canMarkOutcome, collectableCents, mergeItems } from "./rules";
+
+/**
+ * Operazioni dell'agenda admin. Tutte passano dal lock delle prenotazioni (pg_advisory_xact_lock),
+ * come createAppointment: ricontrollano lo stato dentro la transazione e trasformano la violazione
+ * del vincolo anti-sovrapposizione in un messaggio leggibile.
+ */
+
+export type AgendaResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
+
+export const NOT_FOUND = "Appuntamento non trovato.";
+export const NOT_EDITABLE =
+  "Si possono modificare solo gli appuntamenti confermati e non ancora segnati come Fatti (togli prima la spunta).";
+export const TOO_EARLY = "Si può segnare solo dal giorno dell'appuntamento in poi.";
+export const RESTORE_TAKEN =
+  "Nel frattempo quell'orario è stato occupato da un altro appuntamento: non posso rimetterla tra i confermati.";
+
+async function locked<T>(fn: (tx: Db) => Promise<AgendaResult<T>>, overlapMessage = OVERLAP_MESSAGE): Promise<AgendaResult<T>> {
+  try {
+    return await withBookingLock(fn);
+  } catch (error) {
+    if (isOverlapError(error)) return { ok: false, error: overlapMessage };
+    throw error;
+  }
+}
+
+function validDate(d: Date): boolean {
+  return d instanceof Date && !Number.isNaN(d.getTime());
+}
+
+// ─────────────── Nuovo appuntamento ───────────────
+
+export function createAdminAppointment(input: {
+  clientId: string;
+  serviceIds: string[];
+  startsAt: Date;
+  noBuffer: boolean;
+  ignoreWorkingHours: boolean;
+  now?: Date;
+}): Promise<CreateAppointmentResult> {
+  return createAppointment({
+    clientId: input.clientId,
+    serviceIds: input.serviceIds,
+    startsAt: input.startsAt,
+    actor: "ADMIN",
+    bufferOverride: input.noBuffer ? 0 : undefined,
+    ignoreWorkingHours: input.ignoreWorkingHours,
+    now: input.now,
+  });
+}
+
+/** Pausa dopo una modifica: 0 con "Senza pausa", altrimenti quella dell'appuntamento (o quella di default se era 0). */
+function nextBuffer(current: number, noBuffer: boolean, defaultBuffer: number): number {
+  if (noBuffer) return 0;
+  return current > 0 ? current : defaultBuffer;
+}
+
+// ─────────────── Sposta ───────────────
+
+export function rescheduleAppointment(input: {
+  appointmentId: string;
+  startsAt: Date;
+  noBuffer: boolean;
+  ignoreWorkingHours: boolean;
+  now?: Date;
+}): Promise<AgendaResult<{ previousStartsAt: Date; changed: boolean; dayChanged: boolean }>> {
+  const now = input.now ?? new Date();
+  if (!validDate(input.startsAt)) return Promise.resolve({ ok: false, error: "Orario non valido." });
+
+  return locked<{ previousStartsAt: Date; changed: boolean; dayChanged: boolean }>(async (tx) => {
+    const appt = await tx.appointment.findUnique({
+      where: { id: input.appointmentId },
+      select: { id: true, status: true, doneAt: true, startsAt: true, durationMin: true, bufferMin: true },
+    });
+    if (!appt) return { ok: false, error: NOT_FOUND };
+    if (!canEdit(appt)) return { ok: false, error: NOT_EDITABLE };
+
+    const settings = await loadSettings(tx);
+    const bufferMin = nextBuffer(appt.bufferMin, input.noBuffer, settings.bufferMin);
+    const problem = await checkStart(tx, {
+      startsAt: input.startsAt,
+      durationMin: appt.durationMin,
+      bufferMin,
+      settings,
+      actor: "ADMIN",
+      now,
+      excludeAppointmentId: appt.id,
+      ignoreWorkingHours: input.ignoreWorkingHours,
+    });
+    if (problem) return { ok: false, error: problem.error };
+
+    const changed = appt.startsAt.getTime() !== input.startsAt.getTime() || appt.bufferMin !== bufferMin;
+    const dayChanged = dayKeyOf(appt.startsAt) !== dayKeyOf(input.startsAt);
+    await tx.appointment.update({
+      where: { id: appt.id },
+      data: {
+        startsAt: input.startsAt,
+        endsAt: new Date(input.startsAt.getTime() + (appt.durationMin + bufferMin) * 60_000),
+        bufferMin,
+        // Nuovo giorno: il promemoria (email e spunta WhatsApp) riparte per la nuova data.
+        ...(dayChanged ? { reminderEmailSentAt: null, whatsappSentAt: null } : {}),
+      },
+    });
+    return { ok: true, previousStartsAt: appt.startsAt, changed, dayChanged };
+  });
+}
+
+// ─────────────── Modifica servizi ───────────────
+
+export function updateAppointmentServices(input: {
+  appointmentId: string;
+  serviceIds: string[];
+  /** Voci di servizi non più in listino da tenere. */
+  keepItemIds?: string[];
+  noBuffer: boolean;
+  ignoreWorkingHours: boolean;
+  now?: Date;
+}): Promise<AgendaResult<{ startsAt: Date; durationMin: number; totalPriceCents: number }>> {
+  const now = input.now ?? new Date();
+  return locked<{ startsAt: Date; durationMin: number; totalPriceCents: number }>(async (tx) => {
+    const appt = await tx.appointment.findUnique({
+      where: { id: input.appointmentId },
+      select: {
+        id: true,
+        status: true,
+        doneAt: true,
+        startsAt: true,
+        bufferMin: true,
+        items: {
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, serviceId: true, name: true, durationMin: true, priceCents: true, clientPackageId: true },
+        },
+      },
+    });
+    if (!appt) return { ok: false, error: NOT_FOUND };
+    if (!canEdit(appt)) return { ok: false, error: NOT_EDITABLE };
+
+    let services: { id: string; name: string; durationMin: number; priceCents: number }[] = [];
+    if (input.serviceIds.length > 0) {
+      const loaded = await loadServicesForBooking(input.serviceIds, "ADMIN", tx);
+      if (!loaded.ok) return { ok: false, error: loaded.error };
+      services = loaded.services;
+    }
+    const items = mergeItems(appt.items, services, input.keepItemIds ?? []);
+    if (items.length === 0) return { ok: false, error: "Scegli almeno un servizio." };
+
+    const settings = await loadSettings(tx);
+    const durationMin = roundUpTo(
+      items.reduce((sum, i) => sum + i.durationMin, 0),
+      settings.durationRoundingMin,
+    );
+    const bufferMin = nextBuffer(appt.bufferMin, input.noBuffer, settings.bufferMin);
+    if (durationMin <= 0) return { ok: false, error: "La durata dei servizi scelti è zero." };
+
+    const problem = await checkStart(tx, {
+      startsAt: appt.startsAt,
+      durationMin,
+      bufferMin,
+      settings,
+      actor: "ADMIN",
+      now,
+      excludeAppointmentId: appt.id,
+      ignoreWorkingHours: input.ignoreWorkingHours,
+    });
+    if (problem) {
+      return {
+        ok: false,
+        error:
+          problem.code === "SLOT_UNAVAILABLE" && !input.ignoreWorkingHours
+            ? "Con questi servizi l'appuntamento uscirebbe dall'orario di lavoro o finirebbe in un blocco. Attiva “Fuori orario” oppure spostalo."
+            : problem.error,
+      };
+    }
+
+    const totalPriceCents = items.reduce((sum, i) => sum + i.priceCents, 0);
+    await tx.appointmentItem.deleteMany({ where: { appointmentId: appt.id } });
+    await tx.appointment.update({
+      where: { id: appt.id },
+      data: {
+        durationMin,
+        bufferMin,
+        totalPriceCents,
+        endsAt: new Date(appt.startsAt.getTime() + (durationMin + bufferMin) * 60_000),
+        items: { create: items },
+      },
+    });
+    return { ok: true, startsAt: appt.startsAt, durationMin, totalPriceCents };
+  });
+}
+
+// ─────────────── Annulla ───────────────
+
+export function cancelAppointment(input: { appointmentId: string; now?: Date }): Promise<AgendaResult<{ startsAt: Date }>> {
+  const now = input.now ?? new Date();
+  return locked<{ startsAt: Date }>(async (tx) => {
+    const appt = await tx.appointment.findUnique({
+      where: { id: input.appointmentId },
+      select: { id: true, status: true, doneAt: true, startsAt: true },
+    });
+    if (!appt) return { ok: false, error: NOT_FOUND };
+    if (!canEdit(appt)) return { ok: false, error: NOT_EDITABLE };
+    await tx.appointment.update({
+      where: { id: appt.id },
+      data: { status: "CANCELLED", cancelledAt: now, cancelledBy: "ADMIN" },
+    });
+    return { ok: true, startsAt: appt.startsAt };
+  });
+}
+
+// ─────────────── Fatto e importo incassato ───────────────
+
+/** Spunta "Fatto" (importo precompilato senza le voci a pacchetto) o la toglie (azzera doneAt e importo). */
+export function setDone(input: {
+  appointmentId: string;
+  done: boolean;
+  now?: Date;
+}): Promise<AgendaResult<{ amountCollectedCents: number | null }>> {
+  const now = input.now ?? new Date();
+  return locked<{ amountCollectedCents: number | null }>(async (tx) => {
+    const appt = await tx.appointment.findUnique({
+      where: { id: input.appointmentId },
+      select: {
+        id: true,
+        status: true,
+        startsAt: true,
+        doneAt: true,
+        amountCollectedCents: true,
+        items: { select: { priceCents: true, clientPackageId: true } },
+      },
+    });
+    if (!appt) return { ok: false, error: NOT_FOUND };
+
+    if (!input.done) {
+      if (appt.doneAt) {
+        await tx.appointment.update({ where: { id: appt.id }, data: { doneAt: null, amountCollectedCents: null } });
+      }
+      return { ok: true, amountCollectedCents: null };
+    }
+
+    if (appt.status !== "CONFIRMED") return { ok: false, error: "Si può segnare come Fatto solo un appuntamento confermato." };
+    if (appt.doneAt) return { ok: true, amountCollectedCents: appt.amountCollectedCents }; // doppio tocco
+    if (!canMarkOutcome(appt, now)) return { ok: false, error: TOO_EARLY };
+    const amountCollectedCents = collectableCents(appt.items);
+    await tx.appointment.update({ where: { id: appt.id }, data: { doneAt: now, amountCollectedCents } });
+    return { ok: true, amountCollectedCents };
+  });
+}
+
+/** Corregge l'importo incassato (sconto o extra) di un appuntamento già Fatto. */
+export function setAmountCollected(input: { appointmentId: string; cents: number }): Promise<AgendaResult> {
+  if (!Number.isInteger(input.cents) || input.cents < 0 || input.cents > MAX_CENTS) {
+    return Promise.resolve({ ok: false, error: "Importo non valido." });
+  }
+  return locked(async (tx) => {
+    const updated = await tx.appointment.updateMany({
+      where: { id: input.appointmentId, status: "CONFIRMED", doneAt: { not: null } },
+      data: { amountCollectedCents: input.cents },
+    });
+    return updated.count === 1 ? { ok: true } : { ok: false, error: "L'appuntamento non è più segnato come Fatto." };
+  });
+}
+
+// ─────────────── Non presentata ───────────────
+
+export function setNoShow(input: { appointmentId: string; noShow: boolean; now?: Date }): Promise<AgendaResult> {
+  const now = input.now ?? new Date();
+  return locked(
+    async (tx) => {
+      const appt = await tx.appointment.findUnique({
+        where: { id: input.appointmentId },
+        select: { id: true, status: true, doneAt: true, startsAt: true, endsAt: true },
+      });
+      if (!appt) return { ok: false, error: NOT_FOUND };
+
+      if (input.noShow) {
+        if (appt.status === "NO_SHOW") return { ok: true };
+        if (!canEdit(appt)) return { ok: false, error: "Togli prima la spunta “Fatto”." };
+        if (!canMarkOutcome(appt, now)) return { ok: false, error: TOO_EARLY };
+        await tx.appointment.update({ where: { id: appt.id }, data: { status: "NO_SHOW" } });
+        return { ok: true };
+      }
+
+      if (appt.status !== "NO_SHOW") return { ok: true };
+      // Una "non presentata" non occupa il calendario: nel frattempo l'orario può essere stato preso.
+      const other = await tx.appointment.findFirst({
+        where: { status: "CONFIRMED", id: { not: appt.id }, startsAt: { lt: appt.endsAt }, endsAt: { gt: appt.startsAt } },
+        select: { id: true },
+      });
+      if (other) return { ok: false, error: RESTORE_TAKEN };
+      await tx.appointment.update({ where: { id: appt.id }, data: { status: "CONFIRMED" } });
+      return { ok: true };
+    },
+    RESTORE_TAKEN,
+  );
+}

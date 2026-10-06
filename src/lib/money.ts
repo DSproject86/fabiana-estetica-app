@@ -1,6 +1,6 @@
 /** Importi: sempre in centesimi (Int) nel database, in euro solo a video. */
 
-const MAX_CENTS = 1_000_000_00; // 1 milione di euro: limite di sicurezza
+export const MAX_CENTS = 1_000_000_00; // 1 milione di euro: limite di sicurezza
 
 /**
  * Converte quello che scrive l'admin ("35", "35,5", "35,50", "35.50", "1.200,00", "€ 40")

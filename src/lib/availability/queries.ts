@@ -30,8 +30,14 @@ export type RangeContext = {
 /**
  * Tutto ciò che serve per calcolare la disponibilità di un intervallo di giorni
  * con 4 query in totale (non una per giorno).
+ * `excludeAppointmentId`: appuntamento da ignorare (quello che si sta spostando o modificando).
  */
-export async function loadRangeContext(fromDay: DayKey, toDay: DayKey, db: Db = prisma): Promise<RangeContext> {
+export async function loadRangeContext(
+  fromDay: DayKey,
+  toDay: DayKey,
+  db: Db = prisma,
+  excludeAppointmentId?: string,
+): Promise<RangeContext> {
   const rangeStart = dayBounds(fromDay).start;
   const rangeEnd = dayBounds(toDay).end;
   const [weekly, overrides, blocks, appointments] = await Promise.all([
@@ -39,7 +45,12 @@ export async function loadRangeContext(fromDay: DayKey, toDay: DayKey, db: Db = 
     loadOverrides(fromDay, toDay, db),
     loadBlocks(rangeStart, rangeEnd, db),
     db.appointment.findMany({
-      where: { status: "CONFIRMED", startsAt: { lt: rangeEnd }, endsAt: { gt: rangeStart } },
+      where: {
+        status: "CONFIRMED",
+        startsAt: { lt: rangeEnd },
+        endsAt: { gt: rangeStart },
+        ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
+      },
       select: { startsAt: true, endsAt: true },
       orderBy: { startsAt: "asc" },
     }),

@@ -54,7 +54,7 @@ export function sendBookingConfirmedEmail(appointmentId: string, now = new Date(
   });
 }
 
-/** Appuntamento modificato (da collegare all'agenda allo step 7): .ics aggiornato, stesso UID. */
+/** Appuntamento spostato o modificato dall'agenda: .ics aggiornato, stesso UID. */
 export function sendAppointmentChangedEmail(
   appointmentId: string,
   previousStartsAt?: Date | null,
@@ -81,7 +81,7 @@ export function sendAppointmentChangedEmail(
   });
 }
 
-/** Appuntamento cancellato (da collegare all'agenda allo step 7). */
+/** Appuntamento annullato dall'agenda. */
 export function sendAppointmentCancelledEmail(appointmentId: string): Promise<Outcome> {
   return safely("cancellazione", async () => {
     const appointment = await loadAppointment(appointmentId);
