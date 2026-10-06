@@ -82,3 +82,17 @@ export async function loadUnmarkedPast(now = new Date(), range?: { from: DayKey;
 export function loadAgendaAppointment(id: string) {
   return prisma.appointment.findUnique({ where: { id }, select: agendaAppointmentSelect });
 }
+
+/** Riassunto dei giorni nascosti (dal primo del mese a ieri): quanti appuntamenti, quanti Fatti e quanto incassato. */
+export async function loadEarlierSummary(from: DayKey, to: DayKey) {
+  const rows = await prisma.appointment.findMany({
+    where: { status: { not: "CANCELLED" }, startsAt: { gte: dayBounds(from).start, lt: dayBounds(to).end } },
+    select: { status: true, doneAt: true, amountCollectedCents: true },
+  });
+  const done = rows.filter((r) => r.status === "CONFIRMED" && r.doneAt);
+  return {
+    count: rows.length,
+    done: done.length,
+    doneCents: done.reduce((sum, r) => sum + (r.amountCollectedCents ?? 0), 0),
+  };
+}

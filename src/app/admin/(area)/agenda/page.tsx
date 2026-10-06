@@ -1,7 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { WhatsAppButton } from "@/components/admin/WhatsAppButton";
-import { loadAgendaAppointment, loadAgendaDays, loadUnmarkedPast, daysBetween, type AgendaAppointment } from "@/lib/agenda/queries";
+import {
+  daysBetween,
+  loadAgendaAppointment,
+  loadAgendaDays,
+  loadEarlierSummary,
+  loadUnmarkedPast,
+  type AgendaAppointment,
+} from "@/lib/agenda/queries";
 import {
   agendaRange,
   agendaState,
@@ -13,9 +20,10 @@ import {
   parseMonth,
   treatmentEndOf,
 } from "@/lib/agenda/rules";
-import { addMonthsToMonth, formatMonth, monthOf } from "@/lib/booking/calendar";
+import { addMonthsToMonth, formatMonth, monthOf, monthRange } from "@/lib/booking/calendar";
+import { formatEuro } from "@/lib/money";
 import { loadWhatsappLinkBuilder } from "@/lib/notifications/whatsappLinks";
-import { dayKeyOf, formatDayLong, formatTime, todayKey } from "@/lib/time/rome";
+import { addDays, dayKeyOf, formatDayLong, formatTime, todayKey } from "@/lib/time/rome";
 import type { CardData } from "./_components/AppointmentCard";
 import { DaySection } from "./_components/DaySection";
 import { MonthNav } from "./_components/MonthNav";
@@ -44,10 +52,17 @@ export default async function AgendaPage({ searchParams }: { searchParams: Searc
   const range = agendaRange(month, today, showPast);
   const days = unmarkedView ? unmarked.days.slice(0, UNMARKED_DAYS_LIMIT) : daysBetween(range.from, range.to);
 
-  const [agendaDays, whatsappLink, outcome] = await Promise.all([
+  // Mese corrente da oggi: riassunto dei giorni precedenti nascosti; con "passati=1" si possono rinascondere.
+  const { first: monthFirst } = monthRange(month);
+  const earlierFrom = monthFirst;
+  const earlierTo = addDays(today, -1);
+  const hasEarlierDays = !unmarkedView && month === monthOf(today) && today > monthFirst;
+
+  const [agendaDays, whatsappLink, outcome, earlier] = await Promise.all([
     loadAgendaDays(days),
     loadWhatsappLinkBuilder(),
     esitoId && ESITI[esito as keyof typeof ESITI] ? loadAgendaAppointment(esitoId) : null,
+    hasEarlierDays && range.partial ? loadEarlierSummary(earlierFrom, earlierTo) : null,
   ]);
 
   const toCard = (a: AgendaAppointment): CardData => ({
@@ -137,9 +152,29 @@ export default async function AgendaPage({ searchParams }: { searchParams: Searc
         />
       )}
 
-      {!unmarkedView && range.partial ? (
-        <Link href={`/admin/agenda?mese=${month}&passati=1`} className="w-fit text-sm text-prugna/60 underline-offset-2 hover:underline">
-          Mostra anche i giorni precedenti di {formatMonth(month)}
+      {earlier ? (
+        <Link
+          href={`/admin/agenda?mese=${month}&passati=1`}
+          className="flex min-h-12 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm ring-1 ring-prugna/10 hover:bg-cipria/15"
+        >
+          <span>
+            <strong className="font-semibold">Giorni precedenti di {formatMonthName(month)}</strong>
+            <span className="block text-prugna/70">
+              {earlier.count === 0
+                ? "Nessun appuntamento"
+                : `${earlier.count === 1 ? "1 appuntamento" : `${earlier.count} appuntamenti`}${
+                    earlier.done > 0 ? ` · ${earlier.done === 1 ? "1 fatto" : `${earlier.done} fatti`} (${formatEuro(earlier.doneCents)})` : ""
+                  }`}
+            </span>
+          </span>
+          <span className="shrink-0 rounded-full bg-cipria/30 px-3 py-1.5 text-xs font-medium">Mostra</span>
+        </Link>
+      ) : hasEarlierDays && showPast ? (
+        <Link
+          href={`/admin/agenda?mese=${month}`}
+          className="inline-flex min-h-10 w-fit items-center rounded-full bg-cipria/30 px-4 text-sm font-medium hover:bg-cipria/50"
+        >
+          Nascondi i giorni precedenti
         </Link>
       ) : null}
 
@@ -172,6 +207,9 @@ export default async function AgendaPage({ searchParams }: { searchParams: Searc
     </div>
   );
 }
+
+/** "ottobre" (senza anno) */
+const formatMonthName = (month: string) => formatMonth(month).replace(/\s\d{4}$/, "");
 
 const ESITI = {
   nuovo: {
