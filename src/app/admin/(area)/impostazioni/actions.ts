@@ -25,15 +25,31 @@ export async function regenerateInviteAction() {
   revalidatePath("/admin/impostazioni");
 }
 
-export type ContactsFormState = { error?: string; saved?: boolean };
+export type ContactsFormState = { error?: string; field?: "businessWhatsapp" | "businessAddress"; saved?: boolean };
+
+const ADDRESS_MAX = 200;
 
 export async function saveContactsAction(_prev: ContactsFormState, formData: FormData): Promise<ContactsFormState> {
   await requireAdmin();
   const typed = String(formData.get("businessWhatsapp") ?? "").trim();
   const businessWhatsapp = typed ? normalizePhone(typed) : null;
-  if (typed && !businessWhatsapp) return { error: "Controlla il numero di cellulare." };
+  if (typed && !businessWhatsapp) return { error: "Controlla il numero di cellulare.", field: "businessWhatsapp" };
 
-  await prisma.settings.upsert({ where: { id: 1 }, create: { id: 1, businessWhatsapp }, update: { businessWhatsapp } });
+  // Indirizzo su una riga (va anche nel file .ics), spazi in eccesso tolti.
+  const businessAddress = String(formData.get("businessAddress") ?? "").replace(/\s+/g, " ").trim() || null;
+  if (businessAddress && businessAddress.length > ADDRESS_MAX) {
+    return { error: `L'indirizzo può avere al massimo ${ADDRESS_MAX} caratteri.`, field: "businessAddress" };
+  }
+
+  const data = { businessWhatsapp, businessAddress };
+  await prisma.settings.upsert({ where: { id: 1 }, create: { id: 1, ...data }, update: data });
   revalidatePath("/admin/impostazioni");
   return { saved: true };
+}
+
+/** Interruttore "avvisami delle nuove prenotazioni" di ciascun admin. */
+export async function setAdminNotifyAction(adminId: string, enabled: boolean): Promise<void> {
+  await requireAdmin();
+  await prisma.admin.updateMany({ where: { id: adminId }, data: { notifyNewBooking: enabled } });
+  revalidatePath("/admin/impostazioni");
 }

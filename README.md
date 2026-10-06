@@ -17,7 +17,8 @@ npm test                 # test automatici (Vitest), senza database
 
 ### Test su Postgres vero
 
-Prenotazioni simultanee e vincolo anti-sovrapposizione si verificano su un database **locale**
+Prenotazioni simultanee, vincolo anti-sovrapposizione e promemoria (chiamate doppie o in parallelo)
+si verificano su un database **locale**
 usa-e-getta (mai Neon: il setup rifiuta host non locali; i test svuotano le proprie tabelle):
 
 ```bash
@@ -53,13 +54,24 @@ appuntamenti con `tstzrange`, controlli su orari e durate): Prisma li ignora e n
 
 Vedi [`.env.example`](.env.example).
 
+## Promemoria del giorno prima (cron)
+
+`GET /api/cron/promemoria` con `Authorization: Bearer <CRON_SECRET>`, da chiamare **ogni ora**
+(es. cron-job.org). Manda i promemoria per gli appuntamenti di domani solo dopo l'ora impostata in
+Impostazioni (default 18:00, ora di Roma). È idempotente: chiamarlo più volte, anche insieme, non
+manda doppioni. Si ferma da solo dopo ~45 s e risponde con un riepilogo JSON (`sent`, `failed`,
+`remaining`…); gli eventuali rimanenti partono alla chiamata successiva.
+
 ## Struttura
 
 - `src/config/brand.ts`: nome, colori e font (unico file da modificare per la grafica)
 - `src/app/admin/`: area admin (`login/` e le pagine del menu in `(area)/`)
 - `src/app/{accedi,invito,prenota,appuntamenti,privacy}/`: area cliente
 - `src/lib/auth/client*.ts`, `loginCode.ts`: sessione cliente e codice di accesso via email
-- `src/lib/email/`, `src/lib/notifications/`: invio email (Resend) e registro degli invii
+- `src/lib/email/send.ts`: unico punto di contatto con Resend
+- `src/lib/notifications/`: testi e segnaposto, grafica delle email, `.ics`, invio con registro
+  (`deliver.ts`), conferme/modifiche/cancellazioni, promemoria e link WhatsApp
+- `src/app/api/cron/promemoria/`: endpoint del promemoria
 - `src/lib/auth/`: sessioni con cookie firmato, password, controlli d'accesso
 - `src/proxy.ts`: primo filtro sulle pagine `/admin`, `/prenota` e `/appuntamenti`
 - `prisma/`: schema, migrazioni, seed

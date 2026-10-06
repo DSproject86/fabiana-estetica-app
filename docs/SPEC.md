@@ -24,7 +24,7 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
 - 2 admin (Fabiana e il marito) con email e password, area separata.
 - Credenziali da `ADMIN_EMAIL_1/2` e `ADMIN_PASSWORD_1/2` tramite uno script di seed con password hashate.
 - Sessione con cookie firmato da `SESSION_SECRET`.
-- Menu: Agenda, Orari, Listino, Clienti, Pacchetti, Statistiche, Impostazioni.
+- Menu: Agenda, Promemoria di domani, Orari, Listino, Clienti, Pacchetti, Statistiche, Impostazioni.
 
 ## Listino
 
@@ -90,7 +90,7 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
 - Email automatiche con **Resend**:
   - codice di accesso;
   - conferma prenotazione;
-  - promemoria il giorno prima alle 18, tramite un endpoint cron protetto da `CRON_SECRET`;
+  - promemoria il giorno prima alle 18 (`Settings.reminderHour`), tramite un endpoint cron protetto da `CRON_SECRET`;
     non parte se la prenotazione è stata fatta nello stesso giorno;
   - modifiche e cancellazioni.
 - Su ogni appuntamento un tasto **WhatsApp** (link `wa.me` con testo precompilato) per i messaggi
@@ -169,7 +169,45 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
   "Scrivi a Fabiana" non compare.
 - **Indirizzo del link d'invito:** `APP_URL` se impostata, altrimenti il dominio da cui si sta navigando.
 
+## Decisioni prese (step 6)
+
+- **Un solo punto di invio:** `src/lib/notifications/deliver.ts` registra ogni invio in `NotificationLog`
+  (PENDING → SENT / FAILED / SKIPPED) e non lancia mai errori: un'email non partita non blocca niente.
+  `src/lib/email/send.ts` resta l'unico contatto con Resend (Reply-To da `EMAIL_REPLY_TO`, allegati, almeno
+  0,6 s tra due invii, un solo nuovo tentativo solo se Resend risponde 429). Qui si aggiungerà la WhatsApp Cloud API.
+- **Link nelle email:** sempre `APP_URL` (`{link}` = `APP_URL/appuntamenti`).
+- **Grafica email:** tabelle e stili in linea, larghezza max 560px, monogramma FL in HTML, colori da `brand.ts`.
+  Sotto il testo modificabile c'è sempre il riquadro automatico (data, ora, servizi, durata, totale); in fondo
+  indirizzo, WhatsApp ed email di risposta. Sempre anche la versione solo testo.
+- **Conferma:** dopo la prenotazione della cliente, con `after()`: email alla cliente con `.ics` (orari in UTC,
+  fine senza pausa, UID fisso per appuntamento e SEQUENCE crescente) e avviso agli admin con
+  `Admin.notifyNewBooking` acceso (testo fisso, Reply-To della cliente). Nessun avviso per gli appuntamenti
+  inseriti dall'admin.
+- **Modifica e cancellazione:** `sendAppointmentChangedEmail(id, inizioPrecedente)` (con `.ics` aggiornato e
+  riga "Prima era") e `sendAppointmentCancelledEmail(id)`, pronte da collegare all'agenda allo step 7.
+- **Promemoria:** `GET/POST /api/cron/promemoria`, `Authorization: Bearer CRON_SECRET` confrontato a tempo
+  costante, chiamato ogni ora. Invia per gli appuntamenti CONFIRMED di domani solo se a Roma l'ora è
+  ≥ `Settings.reminderHour`. Salta (senza segnare niente, stato "non prevista") le clienti senza email e gli
+  appuntamenti prenotati il giorno prima dell'appuntamento. Ogni appuntamento si "prende in carico" con un
+  aggiornamento condizionato di `reminderEmailSentAt` (da vuoto a adesso) nella stessa transazione della riga
+  di log: due chiamate, anche simultanee, non mandano mai due email. Se l'invio fallisce non si riprova in
+  automatico. `maxDuration` 60 s; dopo ~45 s si ferma e il JSON dice quanti ne restano (partono all'ora dopo).
+  Le chiamate dopo mezzanotte non recuperano i promemoria del giorno prima.
+- **Riprova** (pagina "Promemoria di domani"): blocca la riga dell'appuntamento (`FOR UPDATE`) e invia solo se
+  l'ultimo tentativo è FAILED (o rimasto PENDING da più di 10 minuti): due clic non producono due email.
+- **Step 7:** quando l'admin sposta un appuntamento a un altro giorno va azzerato `reminderEmailSentAt`
+  (e `whatsappSentAt`), così il promemoria riparte per la nuova data.
+- **Segnaposto:** `{nome} {cognome} {data} {ora} {servizi} {durata} {totale} {indirizzo} {link}`; il codice di
+  accesso ammette solo `{nome} {cognome} {codice} {link}` e deve contenere `{codice}`. I segnaposto sbagliati
+  non si salvano.
+- **Seed dei testi:** i predefiniti stanno in `src/lib/notifications/defaults.ts`; il seed aggiorna solo i
+  template identici a un predefinito precedente (`PREVIOUS_DEFAULTS`), quelli modificati non li tocca.
+- **WhatsApp manuale:** link `wa.me` coi testi dei template WHATSAPP (agenda: Conferma / Promemoria;
+  "Promemoria di domani": Promemoria con spunta "inviato" reversibile su `whatsappSentAt`).
+- **Email di prova** (`NotificationLog.isTest`) all'admin collegato, coi dati di esempio e il testo salvato.
+- **`Settings.businessAddress`** facoltativo, usato in email e `.ics`.
+
 ## Da fare prima del lancio
 
 - Informativa privacy definitiva (ora `/privacy` ha un testo provvisorio; aggiornare anche `PRIVACY_VERSION`).
-- Dominio verificato su Resend e `EMAIL_FROM` con quel dominio.
+- ~~Dominio verificato su Resend e `EMAIL_FROM` con quel dominio.~~ Fatto allo step 6 (fabianaestetica.it).

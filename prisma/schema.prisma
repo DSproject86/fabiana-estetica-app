@@ -22,6 +22,7 @@ model Admin {
   sessionVersion   Int       @default(0) // +1 = esci da tutti i dispositivi
   failedLoginCount Int       @default(0)
   lockedUntil      DateTime? @db.Timestamptz(3)
+  notifyNewBooking Boolean   @default(true) // email a ogni prenotazione fatta da una cliente
   createdAt        DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
 }
@@ -201,7 +202,7 @@ model Appointment {
   doneAt               DateTime?         @db.Timestamptz(3) // spunta "Fatto" (reversibile)
   amountCollectedCents Int? // incassato, escluse le voci scalate da un pacchetto
   adminNotes           String?
-  reminderEmailSentAt  DateTime?         @db.Timestamptz(3)
+  reminderEmailSentAt  DateTime?         @db.Timestamptz(3) // promemoria "preso in carico" (segnato prima dell'invio, mai due volte)
   whatsappSentAt       DateTime?         @db.Timestamptz(3) // spunta "inviato" (lista di domani)
   createdAt            DateTime          @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime          @updatedAt @db.Timestamptz(3)
@@ -286,6 +287,7 @@ model Settings {
   bookingHorizonMonths Int      @default(3)
   reminderHour         Int      @default(18)
   businessWhatsapp     String? // cellulare di Fabiana (+39…) per i link wa.me delle clienti
+  businessAddress      String? // indirizzo dello studio (email e .ics)
   updatedAt            DateTime @updatedAt @db.Timestamptz(3)
 }
 
@@ -302,6 +304,7 @@ enum MessageKind {
   REMINDER
   APPOINTMENT_CHANGED
   APPOINTMENT_CANCELLED
+  ADMIN_NEW_BOOKING // avviso agli admin (testo fisso, nessun template)
 }
 
 model MessageTemplate {
@@ -309,7 +312,7 @@ model MessageTemplate {
   kind      MessageKind
   channel   Channel
   subject   String? // solo email
-  body      String // segnaposto: {nome} {data} {ora} {servizi} {totale} {codice}
+  body      String // segnaposto: vedi src/lib/notifications/placeholders.ts
   updatedAt DateTime    @updatedAt @db.Timestamptz(3)
 
   @@unique([kind, channel])
@@ -335,9 +338,11 @@ model NotificationLog {
   status            NotificationStatus @default(PENDING)
   providerMessageId String?
   error             String?
+  isTest            Boolean            @default(false) // "Invia email di prova" dall'admin
   createdAt         DateTime           @default(now()) @db.Timestamptz(3)
   sentAt            DateTime?          @db.Timestamptz(3)
 
   @@index([appointmentId, kind])
   @@index([clientId])
+  @@index([createdAt])
 }

@@ -22,7 +22,7 @@ export async function issueLoginCode(email: string, now = new Date()): Promise<v
   const issued = await prisma.$transaction(async (tx) => {
     const client = await tx.client.findUnique({
       where: { email },
-      select: { id: true, firstName: true, email: true, blockedAt: true },
+      select: { id: true, firstName: true, lastName: true, email: true, blockedAt: true },
     });
     if (!client?.email || client.blockedAt) return null;
 
@@ -45,7 +45,7 @@ export async function issueLoginCode(email: string, now = new Date()): Promise<v
         createdAt: now,
       },
     });
-    return { client: { id: client.id, firstName: client.firstName, email: client.email }, code };
+    return { client: { id: client.id, firstName: client.firstName, lastName: client.lastName, email: client.email }, code };
   });
 
   if (issued) await sendLoginCodeEmail(issued.client, issued.code);

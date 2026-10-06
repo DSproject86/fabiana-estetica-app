@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { WhatsAppButton } from "@/components/admin/WhatsAppButton";
 import { prisma } from "@/lib/db";
+import { loadWhatsappLinkBuilder } from "@/lib/notifications/whatsappLinks";
 import { formatEuro } from "@/lib/money";
 import { dayBounds, dayKeyOf, formatDayLong, formatTime, todayKey, type DayKey } from "@/lib/time/rome";
 
@@ -7,23 +9,27 @@ export const metadata: Metadata = { title: "Agenda" };
 
 const LIMIT = 100;
 
-/** Agenda provvisoria in sola lettura: i prossimi appuntamenti. Quella completa arriva con lo step 7. */
+/** Agenda provvisoria: i prossimi appuntamenti con i pulsanti WhatsApp. Quella completa arriva con lo step 7. */
 export default async function AgendaPage() {
-  const appointments = await prisma.appointment.findMany({
-    where: { status: "CONFIRMED", startsAt: { gte: dayBounds(todayKey()).start } },
-    orderBy: { startsAt: "asc" },
-    take: LIMIT,
-    select: {
-      id: true,
-      startsAt: true,
-      endsAt: true,
-      bufferMin: true,
-      totalPriceCents: true,
-      createdBy: true,
-      client: { select: { firstName: true, lastName: true } },
-      items: { orderBy: { sortOrder: "asc" }, select: { name: true } },
-    },
-  });
+  const [appointments, whatsappLink] = await Promise.all([
+    prisma.appointment.findMany({
+      where: { status: "CONFIRMED", startsAt: { gte: dayBounds(todayKey()).start } },
+      orderBy: { startsAt: "asc" },
+      take: LIMIT,
+      select: {
+        id: true,
+        startsAt: true,
+        endsAt: true,
+        durationMin: true,
+        bufferMin: true,
+        totalPriceCents: true,
+        createdBy: true,
+        client: { select: { firstName: true, lastName: true, phone: true } },
+        items: { orderBy: { sortOrder: "asc" }, select: { name: true } },
+      },
+    }),
+    loadWhatsappLinkBuilder(),
+  ]);
 
   const byDay = new Map<DayKey, typeof appointments>();
   for (const a of appointments) {
@@ -35,7 +41,7 @@ export default async function AgendaPage() {
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-1">
         <h1 className="text-3xl">Agenda</h1>
-        <p className="text-prugna/70">Prossimi appuntamenti (sola lettura). L&apos;agenda completa arriva con lo step 7.</p>
+        <p className="text-prugna/70">Prossimi appuntamenti. L&apos;agenda completa arriva con lo step 7.</p>
       </header>
 
       {appointments.length === 0 ? (
@@ -58,6 +64,10 @@ export default async function AgendaPage() {
                         {a.client.firstName} {a.client.lastName}
                       </span>
                       <span className="text-sm text-prugna/70">{a.items.map((i) => i.name).join(" · ")}</span>
+                      <span className="mt-2 flex flex-wrap gap-2">
+                        <WhatsAppButton compact href={whatsappLink("BOOKING_CONFIRMED", a)} label="Conferma" />
+                        <WhatsAppButton compact href={whatsappLink("REMINDER", a)} label="Promemoria" />
+                      </span>
                     </span>
                     <span className="flex shrink-0 flex-col items-end text-sm">
                       <span className="tabular-nums">{formatEuro(a.totalPriceCents)}</span>

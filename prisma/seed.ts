@@ -6,13 +6,20 @@
  *   A ogni esecuzione gli account vengono sbloccati, e gli admin con un'email non
  *   più presente nelle variabili vengono rimossi: restano solo i 2 configurati.
  * - Riga unica dei parametri (Settings) con i valori di default.
- * - Testi predefiniti dei messaggi: creati solo se mancano, mai sovrascritti
- *   (così le modifiche fatte dall'admin restano).
+ * - Testi predefiniti dei messaggi (src/lib/notifications/defaults.ts): creati se mancano;
+ *   quelli ancora identici a un predefinito precedente passano ai testi nuovi, quelli
+ *   modificati dall'admin non si toccano mai.
  *
  * Nei log non compaiono mai email o password (il repository è pubblico).
  */
 import { PrismaClient, type Channel, type MessageKind } from "@prisma/client";
 import { hashPassword, normalizePassword, verifyPassword } from "../src/lib/auth/password";
+import {
+  DEFAULT_TEMPLATES,
+  seedTemplateAction,
+  type TemplateKey,
+  type TemplateText,
+} from "../src/lib/notifications/defaults";
 
 const prisma = new PrismaClient();
 
@@ -89,75 +96,30 @@ async function seedSettings() {
   console.log("  parametri: ok");
 }
 
-type TemplateSeed = { kind: MessageKind; channel: Channel; subject?: string; body: string };
-
-const TEMPLATES: TemplateSeed[] = [
-  {
-    kind: "LOGIN_CODE",
-    channel: "EMAIL",
-    subject: "Il tuo codice di accesso: {codice}",
-    body: "Ciao {nome},\n\nil tuo codice per accedere è: {codice}\n\nVale 10 minuti. Se non l'hai richiesto tu, ignora questa email.\n\nFabiana",
-  },
-  {
-    kind: "BOOKING_CONFIRMED",
-    channel: "EMAIL",
-    subject: "Appuntamento confermato · {data} alle {ora}",
-    body: "Ciao {nome},\n\nil tuo appuntamento è confermato:\n\n{data} alle {ora}\n{servizi}\nTotale: {totale}\n\nA presto!\nFabiana",
-  },
-  {
-    kind: "REMINDER",
-    channel: "EMAIL",
-    subject: "Promemoria: domani alle {ora}",
-    body: "Ciao {nome},\n\nti ricordo l'appuntamento di domani, {data} alle {ora}:\n{servizi}\n\nSe hai un imprevisto, scrivimi appena puoi.\n\nA domani!\nFabiana",
-  },
-  {
-    kind: "APPOINTMENT_CHANGED",
-    channel: "EMAIL",
-    subject: "Appuntamento modificato · {data} alle {ora}",
-    body: "Ciao {nome},\n\nil tuo appuntamento è stato spostato a:\n\n{data} alle {ora}\n{servizi}\n\nPer qualsiasi dubbio scrivimi.\n\nFabiana",
-  },
-  {
-    kind: "APPOINTMENT_CANCELLED",
-    channel: "EMAIL",
-    subject: "Appuntamento cancellato · {data}",
-    body: "Ciao {nome},\n\nl'appuntamento di {data} alle {ora} è stato cancellato.\n\nSe vuoi fissarne un altro, puoi prenotare dall'app.\n\nFabiana",
-  },
-  {
-    kind: "BOOKING_CONFIRMED",
-    channel: "WHATSAPP",
-    body: "Ciao {nome}! Ti confermo l'appuntamento di {data} alle {ora} ({servizi}). A presto! Fabiana",
-  },
-  {
-    kind: "REMINDER",
-    channel: "WHATSAPP",
-    body: "Ciao {nome}! Ti ricordo l'appuntamento di domani, {data} alle {ora}. A domani! Fabiana",
-  },
-  {
-    kind: "APPOINTMENT_CHANGED",
-    channel: "WHATSAPP",
-    body: "Ciao {nome}! Il tuo appuntamento è stato spostato a {data} alle {ora}. Fammi sapere se va bene. Fabiana",
-  },
-  {
-    kind: "APPOINTMENT_CANCELLED",
-    channel: "WHATSAPP",
-    body: "Ciao {nome}, l'appuntamento di {data} alle {ora} è stato cancellato. Scrivimi se vuoi fissarne un altro. Fabiana",
-  },
-];
-
 async function seedTemplates() {
   let created = 0;
-  for (const t of TEMPLATES) {
+  let updated = 0;
+  let kept = 0;
+  for (const [key, text] of Object.entries(DEFAULT_TEMPLATES) as [TemplateKey, TemplateText | undefined][]) {
+    if (!text) continue;
+    const [kind, channel] = key.split(":") as [MessageKind, Channel];
     const existing = await prisma.messageTemplate.findUnique({
-      where: { kind_channel: { kind: t.kind, channel: t.channel } },
-      select: { id: true },
+      where: { kind_channel: { kind, channel } },
+      select: { id: true, subject: true, body: true },
     });
-    if (existing) continue;
-    await prisma.messageTemplate.create({
-      data: { kind: t.kind, channel: t.channel, subject: t.subject ?? null, body: t.body },
-    });
-    created++;
+    if (!existing) {
+      await prisma.messageTemplate.create({ data: { kind, channel, subject: text.subject, body: text.body } });
+      created++;
+    } else if (seedTemplateAction(key, existing) === "update") {
+      await prisma.messageTemplate.update({ where: { id: existing.id }, data: { subject: text.subject, body: text.body } });
+      updated++;
+    } else {
+      kept++;
+    }
   }
-  console.log(`  testi messaggi: ${created} creati, ${TEMPLATES.length - created} già presenti`);
+  console.log(
+    `  testi messaggi: ${created} creati, ${updated} aggiornati ai nuovi predefiniti, ${kept} lasciati com'erano`,
+  );
 }
 
 async function main() {
