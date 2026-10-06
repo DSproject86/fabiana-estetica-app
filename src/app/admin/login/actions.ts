@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { startAdminSession } from "@/lib/auth/admin";
-import { verifyPasswordOrDummy } from "@/lib/auth/password";
+import { normalizePassword, verifyPasswordOrDummy } from "@/lib/auth/password";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
@@ -13,7 +13,7 @@ export type LoginState = { error?: string; email?: string };
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(254),
-  password: z.string().min(1).max(200),
+  password: z.string().transform(normalizePassword).pipe(z.string().min(1).max(200)),
   next: z.string().optional(),
 });
 

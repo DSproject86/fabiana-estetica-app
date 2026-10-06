@@ -2,6 +2,14 @@ import bcrypt from "bcryptjs";
 
 const ROUNDS = 12;
 
+/**
+ * Spazi iniziali e finali non fanno parte della password: capitano spesso
+ * incollando il valore (nei secrets o nel campo di login) e bloccherebbero l'accesso.
+ */
+export function normalizePassword(password: string): string {
+  return password.trim();
+}
+
 export function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, ROUNDS);
 }

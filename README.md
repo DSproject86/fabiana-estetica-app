@@ -29,6 +29,9 @@ Da GitHub (consigliato): **Actions → "Database: migrazioni e seed" → Run wor
 Il workflow (`.github/workflows/db-migrate.yml`) esegue `npm ci`, `prisma migrate deploy` e il seed,
 leggendo i secrets del repository: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `ADMIN_EMAIL_1`,
 `ADMIN_EMAIL_2`, `ADMIN_PASSWORD_1`, `ADMIN_PASSWORD_2` (facoltativi `ADMIN_NAME_1`, `ADMIN_NAME_2`).
+Il seed sblocca sempre gli account admin, ignora gli spazi iniziali/finali delle password e rimuove
+gli admin la cui email non è più nei secrets (restano solo i 2 configurati). Rilanciarlo dopo aver
+cambiato una password o un'email admin.
 
 Per una nuova migrazione: modificare `prisma/schema.prisma`, poi
 `npx prisma migrate dev --create-only --name <nome>` su un database di sviluppo, controllare l'SQL e committarlo.

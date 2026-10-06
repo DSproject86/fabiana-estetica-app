@@ -1,30 +1,44 @@
 /**
  * Seed idempotente: si può rilanciare quante volte si vuole senza creare duplicati.
  * - Admin da ADMIN_EMAIL_1/2 + ADMIN_PASSWORD_1/2 (password hashate con bcrypt).
- *   Se la password nelle variabili cambia, l'hash viene aggiornato e le sessioni
- *   aperte di quell'admin vengono invalidate.
+ *   Spazi iniziali/finali vengono ignorati (anche al login). Se la password cambia,
+ *   l'hash viene aggiornato e le sessioni aperte di quell'admin vengono invalidate.
+ *   A ogni esecuzione gli account vengono sbloccati, e gli admin con un'email non
+ *   più presente nelle variabili vengono rimossi: restano solo i 2 configurati.
  * - Riga unica dei parametri (Settings) con i valori di default.
  * - Testi predefiniti dei messaggi: creati solo se mancano, mai sovrascritti
  *   (così le modifiche fatte dall'admin restano).
+ *
+ * Nei log non compaiono mai email o password (il repository è pubblico).
  */
 import { PrismaClient, type Channel, type MessageKind } from "@prisma/client";
-import { hashPassword, verifyPassword } from "../src/lib/auth/password";
+import { hashPassword, normalizePassword, verifyPassword } from "../src/lib/auth/password";
 
 const prisma = new PrismaClient();
 
-function readAdmins() {
-  const admins: { email: string; password: string; name: string }[] = [];
+type AdminSeed = { n: number; email: string; password: string; name: string; notes: string[] };
+
+function readAdmins(): AdminSeed[] {
+  const admins: AdminSeed[] = [];
   for (const n of [1, 2]) {
-    const email = process.env[`ADMIN_EMAIL_${n}`]?.trim().toLowerCase();
-    const password = process.env[`ADMIN_PASSWORD_${n}`];
+    const rawEmail = process.env[`ADMIN_EMAIL_${n}`] ?? "";
+    const rawPassword = process.env[`ADMIN_PASSWORD_${n}`] ?? "";
+    const email = rawEmail.trim().toLowerCase();
+    const password = normalizePassword(rawPassword);
     if (!email || !password) {
       throw new Error(`ADMIN_EMAIL_${n} e ADMIN_PASSWORD_${n} sono obbligatorie per il seed.`);
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error(`ADMIN_EMAIL_${n} non sembra un indirizzo email valido.`);
     }
     if (password.length < 10) {
       throw new Error(`ADMIN_PASSWORD_${n} deve avere almeno 10 caratteri.`);
     }
+    const notes: string[] = [];
+    if (email !== rawEmail) notes.push("email normalizzata (spazi/maiuscole)");
+    if (password !== rawPassword) notes.push("spazi rimossi dalla password");
     const name = process.env[`ADMIN_NAME_${n}`]?.trim() || email.split("@")[0];
-    admins.push({ email, password, name });
+    admins.push({ n, email, password, name, notes });
   }
   if (admins[0].email === admins[1].email) {
     throw new Error("ADMIN_EMAIL_1 e ADMIN_EMAIL_2 devono essere diverse.");
@@ -33,29 +47,40 @@ function readAdmins() {
 }
 
 async function seedAdmins() {
-  for (const { email, password, name } of readAdmins()) {
+  const admins = readAdmins();
+
+  for (const { n, email, password, name, notes } of admins) {
     const existing = await prisma.admin.findUnique({ where: { email } });
+    const extra = notes.length ? ` – ${notes.join(", ")}` : "";
     if (!existing) {
       await prisma.admin.create({
         data: { email, name, passwordHash: await hashPassword(password) },
       });
-      console.log(`  admin creato: ${email}`);
+      console.log(`  admin ${n}: creato${extra}`);
       continue;
     }
     const samePassword = await verifyPassword(password, existing.passwordHash);
     await prisma.admin.update({
       where: { email },
-      data: samePassword
-        ? { name }
-        : {
-            name,
-            passwordHash: await hashPassword(password),
-            sessionVersion: { increment: 1 },
-            failedLoginCount: 0,
-            lockedUntil: null,
-          },
+      data: {
+        name,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        ...(samePassword
+          ? {}
+          : { passwordHash: await hashPassword(password), sessionVersion: { increment: 1 } }),
+      },
     });
-    console.log(`  admin aggiornato: ${email}${samePassword ? "" : " (nuova password)"}`);
+    console.log(
+      `  admin ${n}: aggiornato${samePassword ? "" : " (nuova password)"}, account sbloccato${extra}`,
+    );
+  }
+
+  const removed = await prisma.admin.deleteMany({
+    where: { email: { notIn: admins.map((a) => a.email) } },
+  });
+  if (removed.count > 0) {
+    console.log(`  admin rimossi perché non più nelle variabili: ${removed.count}`);
   }
 }
 
