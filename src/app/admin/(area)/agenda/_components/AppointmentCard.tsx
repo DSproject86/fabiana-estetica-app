@@ -21,6 +21,7 @@ export type CardData = {
   amountCents: number | null;
   canOutcome: boolean;
   canEdit: boolean;
+  canCancel: boolean;
   noBuffer: boolean;
   online: boolean;
   hasEmail: boolean;
@@ -61,7 +62,7 @@ export function AppointmentCard({ a }: { a: CardData }) {
       if (next) {
         setAmount(centsToInput(result.amountCents ?? a.prefillCents));
         setPanel("amount");
-      } else if (panel === "amount") setPanel(null);
+      } else setPanel(null);
     });
 
   return (
@@ -162,44 +163,66 @@ export function AppointmentCard({ a }: { a: CardData }) {
             <WhatsAppButton compact href={a.whatsapp.reminder} label="Promemoria" />
           </>
         ) : null}
+        {done ? (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => toggleDone(false)}
+            className="inline-flex min-h-9 items-center rounded-full bg-salvia/50 px-3 text-xs font-medium hover:bg-salvia/70 disabled:opacity-60"
+          >
+            Fatto ✓ · tocca per annullare
+          </button>
+        ) : null}
         {noShow ? (
           <SmallButton disabled={pending} onClick={() => run(() => toggleNoShowAction(a.id, false))}>
             Ripristina
           </SmallButton>
         ) : null}
-        {state === "confirmed" ? (
+        {state === "confirmed" || done ? (
           <SmallButton disabled={pending} onClick={() => setPanel(panel === "more" ? null : "more")} aria-expanded={panel === "more"}>
             {panel === "more" ? "Chiudi" : "Altro…"}
           </SmallButton>
         ) : null}
       </div>
 
-      {panel === "more" && state === "confirmed" ? (
-        <div className="flex flex-wrap gap-2">
+      {panel === "more" && (state === "confirmed" || done) ? (
+        <div className="flex flex-wrap items-center gap-2">
           {a.canEdit ? (
             <>
               <SmallLink href={`/admin/agenda/${a.id}/sposta`}>Sposta</SmallLink>
               <SmallLink href={`/admin/agenda/${a.id}/servizi`}>Servizi</SmallLink>
             </>
           ) : null}
-          {a.canOutcome ? (
+          {a.canOutcome && state === "confirmed" ? (
             <SmallButton disabled={pending} onClick={() => run(() => toggleNoShowAction(a.id, true), () => setPanel(null))}>
               Non presentata
             </SmallButton>
           ) : null}
-          {a.canEdit ? (
+          {a.canCancel ? (
             <SmallButton disabled={pending} tone="danger" onClick={() => setPanel("cancel")}>
               Annulla appuntamento
             </SmallButton>
+          ) : null}
+          {done ? (
+            <span className="basis-full text-xs text-prugna/60">
+              Per spostarlo o cambiare i servizi togli prima la spunta “Fatto”.
+            </span>
           ) : null}
         </div>
       ) : null}
 
       {panel === "cancel" ? (
         <div role="alertdialog" aria-label="Conferma annullamento" className="flex flex-col gap-3 rounded-xl bg-white p-3 ring-1 ring-red-800/30">
-          <p className="text-sm font-medium">
-            Annullare l&apos;appuntamento di {a.clientName} ({a.timeRange})?
-          </p>
+          {done ? (
+            <p className="text-sm font-medium">
+              Questo appuntamento è segnato come Fatto con {formatEuro(a.amountCents ?? a.prefillCents)} incassati: annullandolo
+              l&apos;incasso verrà tolto dalle statistiche. Confermi?
+            </p>
+          ) : (
+            <p className="text-sm font-medium">
+              Annullare l&apos;appuntamento di {a.clientName} ({a.timeRange})?
+            </p>
+          )}
           {a.hasEmail ? (
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -217,7 +240,7 @@ export function AppointmentCard({ a }: { a: CardData }) {
             <button
               type="button"
               disabled={pending}
-              onClick={() => run(() => cancelAppointmentAction(a.id, a.hasEmail && notify))}
+              onClick={() => run(() => cancelAppointmentAction(a.id, a.hasEmail && notify, done))}
               className="min-h-11 rounded-full bg-red-800 px-5 text-sm font-medium text-white disabled:opacity-60"
             >
               {pending ? "Annullo…" : "Sì, annulla"}

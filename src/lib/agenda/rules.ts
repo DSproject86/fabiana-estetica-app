@@ -42,6 +42,14 @@ export function canEdit(a: { status: AgendaStatus; doneAt: Date | null }): boole
   return agendaState(a) === "confirmed";
 }
 
+/**
+ * Annulla: confermati, anche se già Fatti (in quel caso con conferma esplicita: l'incasso
+ * viene tolto). Le "non presentata" prima si ripristinano.
+ */
+export function canCancel(a: { status: AgendaStatus }): boolean {
+  return a.status === "CONFIRMED";
+}
+
 /** Passato e non segnato: confermato, trattamento già finito, né Fatto né Non presentata. */
 export function isUnmarkedPast(
   a: { status: AgendaStatus; doneAt: Date | null; startsAt: Date; durationMin: number },

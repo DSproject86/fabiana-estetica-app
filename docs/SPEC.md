@@ -216,7 +216,10 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
   cliente, allergie, servizi, totale, WhatsApp). I giorni senza appuntamenti né blocchi stanno su una riga; gli
   annullati sono chiusi in "N annullati · mostra".
 - **Stati:** confermato · Fatto (CONFIRMED + `doneAt`) · Non presentata (NO_SHOW) · annullato (CANCELLED).
-  Sposta, Servizi e Annulla solo su confermati non Fatti; Fatto e Non presentata dal giorno dell'appuntamento.
+  Sposta e Servizi solo su confermati non Fatti; Fatto e Non presentata dal giorno dell'appuntamento.
+  **Annulla** anche su un Fatto, con conferma che mostra l'importo ("…segnato come Fatto con X € incassati…"):
+  stato CANCELLED, `doneAt` e importo azzerati nella stessa transazione (senza conferma il server rifiuta).
+  Su un Fatto la spunta si toglie anche col pulsante "Fatto ✓ · tocca per annullare".
 - **Fatto:** un tocco salva `doneAt` e l'importo precompilato (totale senza le voci con `clientPackageId`), poi si
   apre il riquadro per correggerlo. Togliere la spunta azzera `doneAt` e importo. "Non presentata" si ripristina solo
   se nel frattempo l'orario non è stato occupato.

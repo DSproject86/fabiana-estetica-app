@@ -5,6 +5,7 @@ import { parsePickerParams } from "./params";
 import {
   agendaRange,
   agendaState,
+  canCancel,
   canEdit,
   canMarkOutcome,
   collectableCents,
@@ -22,6 +23,10 @@ describe("stati e permessi", () => {
     expect(agendaState({ status: "CANCELLED", doneAt: null })).toBe("cancelled");
     expect(canEdit({ status: "CONFIRMED", doneAt: new Date() })).toBe(false);
     expect(canEdit({ status: "CONFIRMED", doneAt: null })).toBe(true);
+    // Annulla anche sui Fatti (con conferma), non sulle Non presentata o già annullati.
+    expect(canCancel({ status: "CONFIRMED" })).toBe(true);
+    expect(canCancel({ status: "NO_SHOW" })).toBe(false);
+    expect(canCancel({ status: "CANCELLED" })).toBe(false);
   });
 
   it("Fatto / Non presentata dal giorno dell'appuntamento (a Roma), anche prima dell'ora", () => {

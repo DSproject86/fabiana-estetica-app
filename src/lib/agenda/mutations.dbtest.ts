@@ -2,7 +2,10 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { OUTSIDE_HOURS_MESSAGE } from "@/lib/availability/createAppointment";
 import { prisma } from "@/lib/db";
 import { formatTime, instantAt } from "@/lib/time/rome";
+import { loadMonthReport } from "@/lib/stats/queries";
 import {
+  CANCEL_NOT_ALLOWED,
+  CONFIRM_DONE_CANCEL,
   NOT_EDITABLE,
   RESTORE_TAKEN,
   TOO_EARLY,
@@ -224,6 +227,46 @@ describe("annulla", () => {
     expect(saved.cancelledAt).toEqual(NOW);
     await book(MON, h(9), { clientId: ids.giulia });
     expect((await cancelAppointment({ appointmentId: id, now: NOW })).ok).toBe(false); // già annullato
+  });
+});
+
+describe("annulla un appuntamento Fatto", () => {
+  it("senza conferma non succede niente; con conferma azzera Fatto e importo e lo annulla insieme", async () => {
+    const id = await book("2026-10-06", h(9));
+    await setDone({ appointmentId: id, done: true, now: NOW });
+    await setAmountCollected({ appointmentId: id, cents: 4000 });
+    expect((await loadMonthReport("2026-10", NOW)).current.appointmentsCents).toBe(4000);
+
+    expect(await cancelAppointment({ appointmentId: id, now: NOW })).toEqual({ ok: false, error: CONFIRM_DONE_CANCEL });
+    const untouched = await get(id);
+    expect([untouched.status, untouched.amountCollectedCents]).toEqual(["CONFIRMED", 4000]);
+
+    expect(await cancelAppointment({ appointmentId: id, confirmDone: true, now: NOW })).toMatchObject({ ok: true, removedAmountCents: 4000 });
+    const saved = await get(id);
+    expect([saved.status, saved.cancelledBy, saved.doneAt, saved.amountCollectedCents]).toEqual(["CANCELLED", "ADMIN", null, null]);
+
+    const report = await loadMonthReport("2026-10", NOW);
+    expect(report.current.appointmentsCents).toBe(0);
+    expect(report.current.counts).toMatchObject({ done: 0, cancelled: 1 });
+  });
+
+  it("su un appuntamento non Fatto la conferma non serve (e non cambia niente se data)", async () => {
+    const id = await book(MON, h(9));
+    expect(await cancelAppointment({ appointmentId: id, confirmDone: true, now: NOW })).toMatchObject({ ok: true, removedAmountCents: null });
+  });
+
+  it("una Non presentata va prima ripristinata", async () => {
+    const id = await book("2026-10-06", h(9));
+    await setNoShow({ appointmentId: id, noShow: true, now: NOW });
+    expect(await cancelAppointment({ appointmentId: id, confirmDone: true, now: NOW })).toEqual({ ok: false, error: CANCEL_NOT_ALLOWED });
+  });
+
+  it("Sposta e Servizi restano bloccati finché c'è la spunta", async () => {
+    const id = await book("2026-10-06", h(9));
+    await setDone({ appointmentId: id, done: true, now: NOW });
+    expect(await updateAppointmentServices({ appointmentId: id, serviceIds: [ids.peeling], noBuffer: false, ignoreWorkingHours: false, now: NOW })).toEqual({ ok: false, error: NOT_EDITABLE });
+    await setDone({ appointmentId: id, done: false, now: NOW });
+    expect((await updateAppointmentServices({ appointmentId: id, serviceIds: [ids.peeling], noBuffer: false, ignoreWorkingHours: false, now: NOW })).ok).toBe(true);
   });
 });
 

@@ -5,6 +5,7 @@ import { loadAgendaAppointment, loadAgendaDays, loadUnmarkedPast, daysBetween, t
 import {
   agendaRange,
   agendaState,
+  canCancel,
   canEdit,
   canMarkOutcome,
   collectableCents,
@@ -62,6 +63,7 @@ export default async function AgendaPage({ searchParams }: { searchParams: Searc
     amountCents: a.amountCollectedCents,
     canOutcome: canMarkOutcome(a, now),
     canEdit: canEdit(a),
+    canCancel: canCancel(a),
     noBuffer: a.bufferMin === 0,
     online: a.createdBy === "CLIENT",
     hasEmail: !!a.client.email,

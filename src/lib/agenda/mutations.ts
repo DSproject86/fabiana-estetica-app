@@ -13,7 +13,7 @@ import { loadServicesForBooking } from "@/lib/availability/services";
 import { MAX_CENTS } from "@/lib/money";
 import type { Db } from "@/lib/schedule/queries";
 import { dayKeyOf } from "@/lib/time/rome";
-import { canEdit, canMarkOutcome, collectableCents, mergeItems } from "./rules";
+import { canCancel, canEdit, canMarkOutcome, collectableCents, mergeItems } from "./rules";
 
 /**
  * Operazioni dell'agenda admin. Tutte passano dal lock delle prenotazioni (pg_advisory_xact_lock),
@@ -27,6 +27,9 @@ export const NOT_FOUND = "Appuntamento non trovato.";
 export const NOT_EDITABLE =
   "Si possono modificare solo gli appuntamenti confermati e non ancora segnati come Fatti (togli prima la spunta).";
 export const TOO_EARLY = "Si può segnare solo dal giorno dell'appuntamento in poi.";
+export const CANCEL_NOT_ALLOWED = "Si possono annullare solo gli appuntamenti confermati (una “non presentata” va prima ripristinata).";
+export const CONFIRM_DONE_CANCEL =
+  "Questo appuntamento è segnato come Fatto: per annullarlo serve la conferma (l'incasso verrà tolto dalle statistiche).";
 export const RESTORE_TAKEN =
   "Nel frattempo quell'orario è stato occupato da un altro appuntamento: non posso rimetterla tra i confermati.";
 
@@ -205,20 +208,30 @@ export function updateAppointmentServices(input: {
 
 // ─────────────── Annulla ───────────────
 
-export function cancelAppointment(input: { appointmentId: string; now?: Date }): Promise<AgendaResult<{ startsAt: Date }>> {
+/**
+ * Annulla un appuntamento confermato. Se è già "Fatto" serve `confirmDone` (la conferma che l'admin
+ * ha visto l'importo che sparisce): stato, doneAt e importo cambiano nella stessa transazione.
+ */
+export function cancelAppointment(input: {
+  appointmentId: string;
+  confirmDone?: boolean;
+  now?: Date;
+}): Promise<AgendaResult<{ startsAt: Date; removedAmountCents: number | null }>> {
   const now = input.now ?? new Date();
-  return locked<{ startsAt: Date }>(async (tx) => {
+  return locked<{ startsAt: Date; removedAmountCents: number | null }>(async (tx) => {
     const appt = await tx.appointment.findUnique({
       where: { id: input.appointmentId },
-      select: { id: true, status: true, doneAt: true, startsAt: true },
+      select: { id: true, status: true, doneAt: true, startsAt: true, amountCollectedCents: true },
     });
     if (!appt) return { ok: false, error: NOT_FOUND };
-    if (!canEdit(appt)) return { ok: false, error: NOT_EDITABLE };
+    if (!canCancel(appt)) return { ok: false, error: CANCEL_NOT_ALLOWED };
+    // Segnato Fatto da un altro telefono dopo che la conferma era stata mostrata senza importo: si richiede di nuovo.
+    if (appt.doneAt && !input.confirmDone) return { ok: false, error: CONFIRM_DONE_CANCEL };
     await tx.appointment.update({
       where: { id: appt.id },
-      data: { status: "CANCELLED", cancelledAt: now, cancelledBy: "ADMIN" },
+      data: { status: "CANCELLED", cancelledAt: now, cancelledBy: "ADMIN", doneAt: null, amountCollectedCents: null },
     });
-    return { ok: true, startsAt: appt.startsAt };
+    return { ok: true, startsAt: appt.startsAt, removedAmountCents: appt.doneAt ? appt.amountCollectedCents : null };
   });
 }
 

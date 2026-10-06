@@ -89,9 +89,13 @@ export async function toggleNoShowAction(appointmentId: string, noShow: boolean)
 
 // ─────────────── Annulla ───────────────
 
-export async function cancelAppointmentAction(appointmentId: string, notify: boolean): Promise<ActionState> {
+export async function cancelAppointmentAction(
+  appointmentId: string,
+  notify: boolean,
+  confirmDone = false,
+): Promise<ActionState> {
   await requireAdmin();
-  const result = await cancelAppointment({ appointmentId });
+  const result = await cancelAppointment({ appointmentId, confirmDone });
   if (!result.ok) return { error: result.error };
   if (notify) after(() => sendAppointmentCancelledEmail(appointmentId).then(() => undefined));
   backToAgenda("annullato", appointmentId, result.startsAt, notify);
