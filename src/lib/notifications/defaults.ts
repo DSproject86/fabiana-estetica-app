@@ -1,5 +1,4 @@
-import type { Channel } from "@prisma/client";
-import type { TemplateKind } from "./placeholders";
+import type { TemplateChannel, TemplateKind } from "./placeholders";
 
 /**
  * Testi predefiniti dei messaggi. Li usano il seed, "Ripristina testo predefinito" e,
@@ -10,9 +9,9 @@ import type { TemplateKind } from "./placeholders";
  */
 
 export type TemplateText = { subject: string | null; body: string };
-export type TemplateKey = `${TemplateKind}:${Channel}`;
+export type TemplateKey = `${TemplateKind}:${TemplateChannel}`;
 
-export const templateKey = (kind: TemplateKind, channel: Channel): TemplateKey => `${kind}:${channel}`;
+export const templateKey = (kind: TemplateKind, channel: TemplateChannel): TemplateKey => `${kind}:${channel}`;
 
 export const DEFAULT_TEMPLATES: Record<TemplateKey, TemplateText | undefined> = {
   "LOGIN_CODE:EMAIL": {
@@ -54,7 +53,7 @@ export const DEFAULT_TEMPLATES: Record<TemplateKey, TemplateText | undefined> = 
   },
 };
 
-export type TemplateMeta = { kind: TemplateKind; channel: Channel; slug: string; label: string; hint: string };
+export type TemplateMeta = { kind: TemplateKind; channel: TemplateChannel; slug: string; label: string; hint: string };
 
 /** Ordine, indirizzo della pagina e nomi mostrati in Impostazioni → Messaggi. */
 export const TEMPLATE_LIST: TemplateMeta[] = [

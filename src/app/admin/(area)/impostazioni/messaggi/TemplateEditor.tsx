@@ -1,6 +1,5 @@
 "use client";
 
-import type { Channel } from "@prisma/client";
 import { useActionState, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { composeEmail, composeWhatsapp, type EmailInput } from "@/lib/notifications/compose";
@@ -11,6 +10,7 @@ import {
   SUBJECT_MAX,
   validateTemplate,
   type Placeholder,
+  type TemplateChannel,
   type TemplateKind,
 } from "@/lib/notifications/placeholders";
 import { SAMPLE_CODE, sampleAppointment, type BusinessInfo } from "@/lib/notifications/vars";
@@ -31,7 +31,7 @@ export function TemplateEditor({
 }: {
   slug: string;
   kind: TemplateKind;
-  channel: Channel;
+  channel: TemplateChannel;
   initial: TemplateText;
   defaults: TemplateText;
   placeholders: Placeholder[];

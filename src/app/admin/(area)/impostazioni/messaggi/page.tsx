@@ -4,7 +4,7 @@ import { BackHeader } from "@/components/admin/BackHeader";
 import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { DEFAULT_TEMPLATES, MESSAGE_KIND_LABEL, TEMPLATE_LIST, templateKey } from "@/lib/notifications/defaults";
-import type { TemplateKind } from "@/lib/notifications/placeholders";
+import type { TemplateChannel, TemplateKind } from "@/lib/notifications/placeholders";
 import { TEST_EMAIL_KINDS } from "@/lib/notifications/testEmail";
 import { TestEmailForm } from "./TestEmailForm";
 
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Messaggi" };
 export default async function MessaggiPage() {
   const admin = await requireAdmin();
   const stored = await prisma.messageTemplate.findMany({ select: { kind: true, channel: true, subject: true, body: true } });
-  const storedByKey = new Map(stored.map((t) => [templateKey(t.kind as TemplateKind, t.channel), t]));
+  const storedByKey = new Map(stored.map((t) => [templateKey(t.kind as TemplateKind, t.channel as TemplateChannel), t]));
 
   const groups = [
     { channel: "EMAIL" as const, title: "Email", note: "Partono da sole. Sotto il testo c'è sempre il riquadro con i dettagli dell'appuntamento." },

@@ -6,6 +6,8 @@ import type { Channel, MessageKind } from "@prisma/client";
  */
 
 export type TemplateKind = Exclude<MessageKind, "ADMIN_NEW_BOOKING">;
+/** Canali con testi modificabili (le notifiche push agli admin hanno un testo fisso). */
+export type TemplateChannel = Exclude<Channel, "PUSH">;
 
 export const PLACEHOLDERS = {
   nome: "Nome della cliente",
@@ -41,9 +43,9 @@ export function invalidPlaceholders(text: string, kind: TemplateKind): string[] 
 }
 
 export const SUBJECT_MAX = 150;
-export const BODY_MAX = { EMAIL: 3000, WHATSAPP: 1000 } as const;
+export const BODY_MAX: Record<TemplateChannel, number> = { EMAIL: 3000, WHATSAPP: 1000 };
 
-export type TemplateInput = { kind: TemplateKind; channel: Channel; subject: string | null; body: string };
+export type TemplateInput = { kind: TemplateKind; channel: TemplateChannel; subject: string | null; body: string };
 
 /** Controlli prima del salvataggio. Restituisce il messaggio d'errore oppure null. */
 export function validateTemplate({ kind, channel, subject, body }: TemplateInput): string | null {

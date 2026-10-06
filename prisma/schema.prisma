@@ -22,9 +22,27 @@ model Admin {
   sessionVersion   Int       @default(0) // +1 = esci da tutti i dispositivi
   failedLoginCount Int       @default(0)
   lockedUntil      DateTime? @db.Timestamptz(3)
-  notifyNewBooking Boolean   @default(true) // email a ogni prenotazione fatta da una cliente
+  notifyNewBooking Boolean   @default(true) // email e notifica push a ogni prenotazione fatta da una cliente
   createdAt        DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+
+  pushSubscriptions PushSubscription[]
+}
+
+// Notifiche push (Web Push) sui dispositivi degli admin: un abbonamento per browser/app installata.
+model PushSubscription {
+  id         String    @id @default(cuid())
+  adminId    String
+  admin      Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  endpoint   String    @unique // indirizzo del servizio push (Apple, Google, Mozilla, Microsoft)
+  p256dh     String // chiave pubblica del browser
+  auth       String // segreto di autenticazione del browser
+  deviceName String // es. "iPhone di Fabiana"
+  userAgent  String?
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  lastUsedAt DateTime? @db.Timestamptz(3) // ultima notifica consegnata
+
+  @@index([adminId])
 }
 
 model InviteLink {
@@ -308,6 +326,7 @@ model Settings {
 enum Channel {
   EMAIL
   WHATSAPP
+  PUSH
 }
 
 enum MessageKind {
@@ -341,7 +360,7 @@ model NotificationLog {
   id                String             @id @default(cuid())
   channel           Channel
   kind              MessageKind
-  provider          String // "resend", "wa-link", in futuro "wa-cloud"
+  provider          String // "resend", "wa-link", "web-push", in futuro "wa-cloud"
   recipient         String
   clientId          String?
   client            Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)

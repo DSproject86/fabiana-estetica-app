@@ -81,6 +81,8 @@ manda doppioni. Si ferma da solo dopo ~45 s e risponde con un riepilogo JSON (`s
 - `src/config/security-headers.ts`: header di sicurezza (CSP ecc.), usati da `next.config.ts`
 - `src/app/manifest.ts`, `src/lib/pwa/`, `src/app/icons/`, `public/sw.js`, `src/app/offline/`: app installabile
 - `src/app/protections.test.ts`: controlla che pagine admin, azioni e API richiedano il login
+- `src/lib/push/`: notifiche push agli admin (abbonamenti, invio con registro, pulizia degli scaduti);
+  eventi `push` e `notificationclick` in `public/sw.js`
 - `src/lib/auth/`: sessioni con cookie firmato, password, controlli d'accesso
 - `src/proxy.ts`: primo filtro sulle pagine `/admin`, `/prenota` e `/appuntamenti`
 - `prisma/`: schema, migrazioni, seed

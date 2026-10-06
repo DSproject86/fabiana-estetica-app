@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { brand } from "@/config/brand";
+import { detectPlatform, isStandalone, type Platform } from "./platform";
 
 /**
  * Riquadro "Aggiungi alla schermata Home" per le clienti collegate, finché non hanno installato l'app.
@@ -14,7 +15,6 @@ const DISMISS_KEY = "fl-install-dismissed";
 const INSTALLED_KEY = "fl-install-done";
 const DISMISS_DAYS = 30;
 
-type Platform = "ios" | "android";
 /** Cosa mostrare all'apertura: "blocked" = già installata, aperta dalla Home o chiusa da poco. */
 type Initial = Platform | "other" | "blocked";
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
@@ -32,21 +32,6 @@ function write(key: string, value: string) {
   } catch {
     // Navigazione privata o memoria bloccata: il riquadro tornerà alla prossima visita.
   }
-}
-
-function detectPlatform(): Platform | null {
-  const ua = navigator.userAgent;
-  const iPadOS = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
-  if (/iPhone|iPad|iPod/.test(ua) || iPadOS) return "ios";
-  if (/Android/.test(ua)) return "android";
-  return null;
-}
-
-function isStandalone(): boolean {
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
 }
 
 /** Calcolato solo nel browser (sul server non si sa nulla): niente differenze all'idratazione. */

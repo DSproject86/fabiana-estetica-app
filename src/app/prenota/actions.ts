@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { requireClient } from "@/lib/auth/client";
 import { createAppointment } from "@/lib/availability/createAppointment";
 import { bookingQuery, parseBookingParams, type BookingErrorCode } from "@/lib/booking/params";
-import { sendNewBookingEmailsInBackground } from "@/lib/notifications/appointmentEmails";
+import { sendNewBookingNoticesInBackground } from "@/lib/notifications/appointmentEmails";
 import { instantAt, timeToMinutes } from "@/lib/time/rome";
 
 const ERROR_CODES: Record<"INVALID" | "SLOT_TAKEN" | "SLOT_UNAVAILABLE", BookingErrorCode> = {
@@ -37,6 +37,6 @@ export async function confirmBookingAction(formData: FormData) {
     redirect(`/prenota${bookingQuery({ services, day, error: result.code === "LIMIT" ? result.limit : ERROR_CODES[result.code] })}`);
   }
   // Conferma alla cliente e avviso agli admin dopo la risposta: un invio non riuscito non blocca niente.
-  sendNewBookingEmailsInBackground(result.appointmentId);
+  sendNewBookingNoticesInBackground(result.appointmentId);
   redirect(`/prenota/confermata/${result.appointmentId}`);
 }

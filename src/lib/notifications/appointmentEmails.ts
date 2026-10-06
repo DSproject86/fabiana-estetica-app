@@ -1,6 +1,7 @@
 import "server-only";
 import { after } from "next/server";
 import { prisma } from "@/lib/db";
+import { pushNewBookingToAdmins } from "@/lib/push/deliver";
 import type { EmailMessage } from "@/lib/email/send";
 import { composeAdminNewBooking, composeEmail } from "./compose";
 import { appointmentInfoSelect, loadBusinessInfo, loadTemplate, type AppointmentWithClient } from "./context";
@@ -120,10 +121,13 @@ export async function notifyAdminsOfNewBooking(appointmentId: string): Promise<D
   }
 }
 
-/** Dopo la risposta alla cliente: conferma a lei, poi avviso agli admin. */
-export function sendNewBookingEmailsInBackground(appointmentId: string) {
+/**
+ * Dopo la risposta alla cliente: conferma a lei, poi avviso agli admin (email e notifiche push insieme).
+ * Nessuna di queste funzioni lancia errori: la prenotazione è già salvata e resta valida comunque.
+ */
+export function sendNewBookingNoticesInBackground(appointmentId: string) {
   after(async () => {
     await sendBookingConfirmedEmail(appointmentId);
-    await notifyAdminsOfNewBooking(appointmentId);
+    await Promise.all([notifyAdminsOfNewBooking(appointmentId), pushNewBookingToAdmins(appointmentId)]);
   });
 }

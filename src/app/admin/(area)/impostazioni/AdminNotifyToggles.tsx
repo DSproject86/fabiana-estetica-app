@@ -9,8 +9,11 @@ type AdminRow = { id: string; name: string; email: string; notifyNewBooking: boo
 export function AdminNotifyToggles({ admins }: { admins: AdminRow[] }) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm font-medium">Avviso email per le nuove prenotazioni</p>
-      <p className="text-xs text-prugna/60">Arriva quando una cliente prenota dall&apos;app (non per gli appuntamenti inseriti da voi).</p>
+      <p className="text-sm font-medium">Avviso delle nuove prenotazioni (email e notifiche)</p>
+      <p className="text-xs text-prugna/60">
+        Arriva quando una cliente prenota dall&apos;app (non per gli appuntamenti inseriti da voi): email e, sui dispositivi attivati
+        in Il mio account, notifica push.
+      </p>
       <ul className="flex flex-col gap-2">
         {admins.map((admin) => (
           <AdminToggle key={admin.id} admin={admin} />

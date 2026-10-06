@@ -37,7 +37,7 @@ export default async function ImpostazioniPage() {
       <NavCard
         href="/admin/impostazioni/account"
         title="Il mio account"
-        description="Cambia password ed esci da tutti i dispositivi."
+        description="Notifiche su questo dispositivo, cambio password, esci da tutti i dispositivi."
       />
 
       <section aria-labelledby="invito" className="flex flex-col gap-4">

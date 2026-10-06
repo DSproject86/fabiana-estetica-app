@@ -332,6 +332,35 @@ Stato: **tutti gli step completati** (manca solo quanto indicato nella checklist
     offre, altrimenti menu ⋮). Non compare se l'app è aperta dalla Home o è stata installata; chiuso con la ×,
     ricompare dopo 30 giorni.
 
+## Decisioni prese (notifiche push agli admin)
+
+- **Web Push sulla PWA** (gratuito, libreria `web-push`), solo per gli admin. Chiavi VAPID in `VAPID_PUBLIC_KEY`,
+  `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:) **solo in Production** su Vercel: le anteprime condividono il database
+  e non devono mandare notifiche. Senza chiavi (anteprime, sviluppo, test) l'invio è registrato come "non inviata".
+  La chiave pubblica arriva al browser dalla pagina (niente `NEXT_PUBLIC_`). Se le chiavi cambiano, ogni dispositivo
+  va riattivato (l'app rifà l'abbonamento da sola quando si tocca "Attiva notifiche").
+- **Migrazione `20261009000000_notifiche_push`** (solo aggiunte): canale `PUSH` in `NotificationLog`, tabella
+  `PushSubscription` (admin, endpoint unico, chiavi `p256dh`/`auth`, nome del dispositivo, user agent, creato, ultima
+  notifica consegnata). Si cancella con l'admin.
+- **Il mio account → Notifiche su questo dispositivo:** il permesso si chiede solo al tocco di "Attiva notifiche";
+  nome del dispositivo proposto ("iPhone di Fabiana") e modificabile; stati: attive · non attive · bloccate (come
+  riattivarle) · non supportate · iPhone non aperto dall'icona (iOS 16.4+, Aggiungi alla schermata Home, apri
+  dall'icona) · chiavi mancanti sul server. "Invia notifica di prova" (registrata come prova), "Disattiva", elenco dei
+  propri dispositivi con "Rimuovi". Al massimo **10 dispositivi per admin**; lo stesso browser registrato da un altro
+  admin passa a chi lo attiva adesso.
+- **Abbonamenti accettati** solo con indirizzo https dei servizi push dei browser (Google, Mozilla, Apple, Microsoft)
+  e chiavi valide (punto della curva P-256): il server non fa mai richieste a indirizzi qualsiasi.
+- **Invio:** a ogni prenotazione fatta da una cliente, nello stesso `after()` dell'email di avviso (in parallelo, dopo
+  la conferma alla cliente), a tutti i dispositivi degli admin con `notifyNewBooking` acceso. Titolo "Nuova
+  prenotazione", testo "Giulia Bianchi · mer 14 ott 10:30 · Pulizia viso"; al tocco si apre
+  `/admin/agenda?mese=AAAA-MM#giorno-AAAA-MM-GG` (finestra già aperta portata su quella pagina, altrimenti una nuova).
+  TTL 24 ore, urgenza alta, `tag` per prenotazione. Nessun errore blocca mai la prenotazione.
+- **Registro:** una riga per dispositivo (canale PUSH, destinatario "email dell'admin · dispositivo"). Risposta 404/410
+  dal servizio push → abbonamento eliminato in automatico e riga "Abbonamento scaduto o revocato". Gli altri errori
+  restano registrati e il dispositivo resta.
+- **Service worker:** eventi `push` (mostra la notifica con l'icona FL) e `notificationclick` (solo percorsi interni);
+  la pagina offline non cambia.
+
 ## Checklist di lancio
 
 Da fare prima di invitare le clienti vere:
@@ -354,6 +383,8 @@ Da fare prima di invitare le clienti vere:
 - [ ] **Prova completa da telefono:** iscrizione dal link, codice via email, prenotazione, email di conferma con
   `.ics`, promemoria, agenda (Fatto, scala dal pacchetto), statistiche.
 - [ ] **App installata** su un iPhone e un Android (icona, apertura a schermo intero, pagina "Sei offline").
+- [ ] **Notifiche push:** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` su Vercel (solo Production), poi su
+  ogni telefono degli admin: app aperta dall'icona → Il mio account → Attiva notifiche → Invia notifica di prova.
 - [ ] **Copia di sicurezza:** scaricare i CSV dopo il caricamento iniziale e poi con regolarità (es. ogni mese);
   Neon tiene comunque la cronologia del database (verificare il periodo di ripristino del piano).
 - [x] Dominio verificato su Resend e `EMAIL_FROM` con quel dominio (step 6, fabianaestetica.it).

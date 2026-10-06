@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TEMPLATES, PREVIOUS_DEFAULTS, TEMPLATE_LIST, seedTemplateAction, templateKey, type TemplateKey } from "./defaults";
-import { validateTemplate, type TemplateKind } from "./placeholders";
-import type { Channel } from "@prisma/client";
+import { validateTemplate, type TemplateChannel, type TemplateKind } from "./placeholders";
 
-const split = (key: TemplateKey) => key.split(":") as [TemplateKind, Channel];
+const split = (key: TemplateKey) => key.split(":") as [TemplateKind, TemplateChannel];
 
 describe("testi predefiniti", () => {
   it("sono tutti validi (anche quelli vecchi) e ognuno ha la sua pagina", () => {

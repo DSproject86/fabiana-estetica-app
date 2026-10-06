@@ -71,7 +71,7 @@ export default async function RegistroPage() {
                     {formatDayShort(dayKeyOf(log.createdAt))} {formatTime(log.createdAt)}
                   </span>
                   <span className="font-medium">{MESSAGE_KIND_LABEL[log.kind]}</span>
-                  {log.channel === "WHATSAPP" ? <span className="text-xs text-prugna/60">WhatsApp</span> : null}
+                  {log.channel !== "EMAIL" ? <span className="text-xs text-prugna/60">{log.channel === "PUSH" ? "Push" : "WhatsApp"}</span> : null}
                   {log.isTest ? <span className="rounded-full bg-oro/20 px-2 py-0.5 text-xs">prova</span> : null}
                   <span className={`ml-auto rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}>
                     {status.label}

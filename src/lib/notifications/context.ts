@@ -1,9 +1,9 @@
 import "server-only";
-import type { Channel, Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { replyToAddress } from "@/lib/email/send";
 import { DEFAULT_TEMPLATES, templateKey, type TemplateText } from "./defaults";
-import type { TemplateKind } from "./placeholders";
+import type { TemplateChannel, TemplateKind } from "./placeholders";
 import type { BusinessInfo } from "./vars";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -27,7 +27,7 @@ export async function loadBusinessInfo(db: Db = prisma): Promise<BusinessInfo> {
 }
 
 /** Testo salvato dall'admin, oppure quello predefinito se manca. */
-export async function loadTemplate(kind: TemplateKind, channel: Channel, db: Db = prisma): Promise<TemplateText> {
+export async function loadTemplate(kind: TemplateKind, channel: TemplateChannel, db: Db = prisma): Promise<TemplateText> {
   const stored = await db.messageTemplate.findUnique({
     where: { kind_channel: { kind, channel } },
     select: { subject: true, body: true },
