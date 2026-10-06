@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { listClients } from "@/lib/clients/adminClients";
 import { formatPhone } from "@/lib/clients/phone";
 
@@ -9,6 +10,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
 export default async function ClientiPage({ searchParams }: { searchParams: SearchParams }) {
+  await requireAdmin();
   const params = await searchParams;
   const q = first(params.q).slice(0, 100);
   const page = Math.max(1, Math.min(1000, Number.parseInt(first(params.pagina), 10) || 1));

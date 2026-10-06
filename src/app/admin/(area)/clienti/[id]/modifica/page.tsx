@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { BackHeader } from "@/components/admin/BackHeader";
+import { requireAdmin } from "@/lib/auth/admin";
 import { loadSettings } from "@/lib/availability/queries";
 import { formatPhone } from "@/lib/clients/phone";
 import { prisma } from "@/lib/db";
@@ -10,6 +11,7 @@ import { EditClientForm } from "./EditClientForm";
 export const metadata: Metadata = { title: "Modifica cliente" };
 
 export default async function ModificaClientePage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const [client, settings] = await Promise.all([
     prisma.client.findFirst({ where: { id, anonymizedAt: null } }),

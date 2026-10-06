@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { dbDateToDayKey, minutesToTime, todayKey } from "@/lib/time/rome";
 import { DeleteExceptionButton } from "../../_components/DeleteExceptionButton";
@@ -10,6 +11,7 @@ import { deleteException, saveException } from "../../actions";
 export const metadata: Metadata = { title: "Modifica eccezione" };
 
 export default async function ModificaEccezionePage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const override = await prisma.dateOverride.findUnique({
     where: { id },

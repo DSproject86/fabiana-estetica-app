@@ -1,8 +1,11 @@
 /**
  * Seed idempotente: si può rilanciare quante volte si vuole senza creare duplicati.
  * - Admin da ADMIN_EMAIL_1/2 + ADMIN_PASSWORD_1/2 (password hashate con bcrypt).
- *   Spazi iniziali/finali vengono ignorati (anche al login). Se la password cambia,
- *   l'hash viene aggiornato e le sessioni aperte di quell'admin vengono invalidate.
+ *   Spazi iniziali/finali vengono ignorati (anche al login). La password dei secrets vale
+ *   solo quando l'admin viene creato: dopo, ognuno la cambia dall'app ("Il mio account") e
+ *   il seed non la tocca più. Con RESET_ADMIN_PASSWORDS=1 (workflow: "Reimposta le password
+ *   admin dai secrets") le password tornano quelle dei secrets e le sessioni aperte si chiudono:
+ *   serve se una password è stata dimenticata.
  *   A ogni esecuzione gli account vengono sbloccati, e gli admin con un'email non
  *   più presente nelle variabili vengono rimossi: restano solo i 2 configurati.
  * - Riga unica dei parametri (Settings) con i valori di default.
@@ -55,6 +58,8 @@ function readAdmins(): AdminSeed[] {
 
 async function seedAdmins() {
   const admins = readAdmins();
+  const resetPasswords = process.env.RESET_ADMIN_PASSWORDS === "1" || process.env.RESET_ADMIN_PASSWORDS === "true";
+  if (resetPasswords) console.log("  RESET_ADMIN_PASSWORDS: le password tornano quelle dei secrets");
 
   for (const { n, email, password, name, notes } of admins) {
     const existing = await prisma.admin.findUnique({ where: { email } });
@@ -66,20 +71,19 @@ async function seedAdmins() {
       console.log(`  admin ${n}: creato${extra}`);
       continue;
     }
-    const samePassword = await verifyPassword(password, existing.passwordHash);
+    // Senza reset la password scelta nell'app non si tocca.
+    const reset = resetPasswords && !(await verifyPassword(password, existing.passwordHash));
     await prisma.admin.update({
       where: { email },
       data: {
         name,
         failedLoginCount: 0,
         lockedUntil: null,
-        ...(samePassword
-          ? {}
-          : { passwordHash: await hashPassword(password), sessionVersion: { increment: 1 } }),
+        ...(reset ? { passwordHash: await hashPassword(password), sessionVersion: { increment: 1 } } : {}),
       },
     });
     console.log(
-      `  admin ${n}: aggiornato${samePassword ? "" : " (nuova password)"}, account sbloccato${extra}`,
+      `  admin ${n}: aggiornato${reset ? " (password reimpostata dai secrets)" : ""}, account sbloccato${extra}`,
     );
   }
 

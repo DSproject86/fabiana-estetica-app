@@ -5,6 +5,7 @@ import { parsePickerParams } from "@/lib/agenda/params";
 import { adminCalendar } from "@/lib/agenda/picker";
 import { loadAgendaAppointment } from "@/lib/agenda/queries";
 import { canEdit, notifyByDefault, treatmentEndOf } from "@/lib/agenda/rules";
+import { requireAdmin } from "@/lib/auth/admin";
 import { loadSettings } from "@/lib/availability/queries";
 import { monthOf } from "@/lib/booking/calendar";
 import { formatDuration } from "@/lib/duration";
@@ -18,6 +19,7 @@ export const metadata: Metadata = { title: "Sposta appuntamento" };
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function SpostaPage({ params, searchParams }: Props) {
+  await requireAdmin();
   const { id } = await params;
   const [appt, settings] = await Promise.all([loadAgendaAppointment(id), loadSettings()]);
   if (!appt) notFound();

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BackHeader } from "@/components/admin/BackHeader";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { parsePickerParams, pickerQuery } from "@/lib/agenda/params";
 import { adminCalendar, loadAdminCatalog } from "@/lib/agenda/picker";
@@ -24,6 +25,7 @@ export const metadata: Metadata = { title: "Nuovo appuntamento" };
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function NuovoAppuntamentoPage({ searchParams }: { searchParams: SearchParams }) {
+  await requireAdmin();
   const choice = parsePickerParams(await searchParams);
   const now = new Date();
   const client = choice.client

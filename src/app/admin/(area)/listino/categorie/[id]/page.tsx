@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { CategoryForm } from "../../_components/CategoryForm";
 import { DeleteButton } from "../../_components/DeleteButton";
@@ -9,6 +10,7 @@ import { deleteCategory, updateCategory } from "../../actions";
 export const metadata: Metadata = { title: "Modifica categoria" };
 
 export default async function ModificaCategoriaPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const category = await prisma.serviceCategory.findUnique({
     where: { id },

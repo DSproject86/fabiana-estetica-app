@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { brand } from "@/config/brand";
 import { parseMonth } from "@/lib/agenda/rules";
+import { requireAdmin } from "@/lib/auth/admin";
 import { addMonthsToMonth, formatMonth, monthOf } from "@/lib/booking/calendar";
 import { formatEuro } from "@/lib/money";
 import { loadMonthReport } from "@/lib/stats/queries";
@@ -25,6 +26,7 @@ function signedPercent(value: number): string {
 }
 
 export default async function StatistichePage({ searchParams }: { searchParams: SearchParams }) {
+  await requireAdmin();
   const now = new Date();
   const today = todayKey(now);
   const month = parseMonth(first((await searchParams).mese), today);

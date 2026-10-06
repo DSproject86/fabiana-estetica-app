@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { LogoutButton, linkButtonClass } from "@/components/client/ClientShell";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { getCurrentClient } from "@/lib/auth/client";
 
 export default async function HomePage() {
@@ -22,6 +23,9 @@ export default async function HomePage() {
             <Link href="/appuntamenti" className={linkButtonClass.secondary}>
               I miei appuntamenti
             </Link>
+          </div>
+          <div className="w-full text-left">
+            <InstallPrompt />
           </div>
           <LogoutButton />
         </>

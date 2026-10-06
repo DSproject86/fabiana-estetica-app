@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ClientShell, PageTitle } from "@/components/client/ClientShell";
 import { requireClient } from "@/lib/auth/client";
+import { countClientBookings } from "@/lib/availability/createAppointment";
+import { BOOKING_LIMIT_MESSAGES, bookingLimitProblem } from "@/lib/booking/abuseLimits";
+import { prisma } from "@/lib/db";
 import { bookingDuration } from "@/lib/availability/duration";
 import { clientLimits, computeAvailableDays, computeDailySlots, loadRangeContext, loadSettings } from "@/lib/availability/queries";
 import { MAX_SERVICES_PER_BOOKING } from "@/lib/availability/services";
@@ -16,9 +19,25 @@ export const metadata: Metadata = { title: "Prenota", robots: { index: false } }
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function PrenotaPage({ searchParams }: { searchParams: SearchParams }) {
-  await requireClient();
+  const client = await requireClient();
   const params = parseBookingParams(await searchParams);
   const now = new Date();
+
+  // Limiti anti-abuso: se già raggiunti si dice subito, senza far scegliere servizi e orari.
+  const limit = bookingLimitProblem(await countClientBookings(prisma, client.id, now));
+  if (limit) {
+    return (
+      <ClientShell loggedIn wide>
+        <PageTitle title="Prenota" back={{ href: "/", label: "Home" }} />
+        <div role="alert" className="flex flex-col gap-3 rounded-2xl bg-white p-5 ring-1 ring-prugna/10">
+          <p>{BOOKING_LIMIT_MESSAGES[limit]}</p>
+          <Link href="/appuntamenti" className="w-fit underline underline-offset-2">
+            I miei appuntamenti
+          </Link>
+        </div>
+      </ClientShell>
+    );
+  }
 
   const [settings, categories] = await Promise.all([loadSettings(), loadBookingCatalog()]);
   const bookable = new Map(categories.flatMap((c) => c.services).map((s) => [s.id, s]));

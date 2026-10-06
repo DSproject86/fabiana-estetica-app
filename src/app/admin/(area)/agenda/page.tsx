@@ -20,6 +20,7 @@ import {
   parseMonth,
   treatmentEndOf,
 } from "@/lib/agenda/rules";
+import { requireAdmin } from "@/lib/auth/admin";
 import { addMonthsToMonth, formatMonth, monthOf, monthRange } from "@/lib/booking/calendar";
 import { loadSettings } from "@/lib/availability/queries";
 import { formatEuro } from "@/lib/money";
@@ -42,6 +43,7 @@ const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 const UNMARKED_DAYS_LIMIT = 31;
 
 export default async function AgendaPage({ searchParams }: { searchParams: SearchParams }) {
+  await requireAdmin();
   const params = await searchParams;
   const now = new Date();
   const today = todayKey(now);

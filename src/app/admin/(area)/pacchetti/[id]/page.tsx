@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BackHeader } from "@/components/admin/BackHeader";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { centsToInput, formatEuro } from "@/lib/money";
 import { loadPackage } from "@/lib/packages/queries";
@@ -15,6 +16,7 @@ export const metadata: Metadata = { title: "Pacchetto" };
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function PacchettoPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SearchParams }) {
+  await requireAdmin();
   const { id } = await params;
   const esito = (await searchParams).esito;
   const p = await loadPackage(id);

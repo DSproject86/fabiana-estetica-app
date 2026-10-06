@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireAdmin } from "@/lib/auth/admin";
 import { isValidDayKey, todayKey } from "@/lib/time/rome";
 import { BlockForm } from "../../_components/BlockForm";
 import { BackLink } from "../../_components/FormBits";
@@ -7,6 +8,7 @@ import { createBlock } from "../../actions";
 export const metadata: Metadata = { title: "Blocca una fascia" };
 
 export default async function NuovoBloccoPage({ searchParams }: { searchParams: Promise<{ data?: string }> }) {
+  await requireAdmin();
   const { data } = await searchParams;
   const today = todayKey();
   const date = data && isValidDayKey(data) && data >= today ? data : today;

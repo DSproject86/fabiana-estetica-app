@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { centsToInput } from "@/lib/money";
 import { encodeCoverage } from "@/lib/packages/rules";
@@ -12,6 +13,7 @@ import { deletePackageTemplate, updatePackageTemplate } from "../../actions";
 export const metadata: Metadata = { title: "Modifica pacchetto" };
 
 export default async function ModificaPacchettoPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const [template, coverage] = await Promise.all([
     prisma.packageTemplate.findUnique({

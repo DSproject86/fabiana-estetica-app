@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { centsToInput } from "@/lib/money";
 import { DeleteButton } from "../../_components/DeleteButton";
@@ -10,6 +11,7 @@ import { deleteService, updateService } from "../../actions";
 export const metadata: Metadata = { title: "Modifica servizio" };
 
 export default async function ModificaServizioPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const [service, categories] = await Promise.all([
     prisma.service.findUnique({ where: { id } }),

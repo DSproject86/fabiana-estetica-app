@@ -4,10 +4,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { startAdminSession } from "@/lib/auth/admin";
+import { afterFailedAttempt, isLocked } from "@/lib/auth/lockout";
 import { normalizePassword, verifyPasswordOrDummy } from "@/lib/auth/password";
-
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCK_MINUTES = 15;
 
 export type LoginState = { error?: string; email?: string };
 
@@ -40,7 +38,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   const admin = await prisma.admin.findUnique({ where: { email } });
   const now = new Date();
 
-  if (admin?.lockedUntil && admin.lockedUntil > now) {
+  if (admin && isLocked(admin.lockedUntil, now)) {
     return { error: "Troppi tentativi. Riprova tra qualche minuto.", email: typedEmail };
   }
 
@@ -48,16 +46,9 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
 
   if (!admin || !ok) {
     if (admin) {
-      const failed = admin.failedLoginCount + 1;
-      const lock = failed >= MAX_FAILED_ATTEMPTS;
-      await prisma.admin.update({
-        where: { id: admin.id },
-        data: {
-          failedLoginCount: lock ? 0 : failed,
-          lockedUntil: lock ? new Date(now.getTime() + LOCK_MINUTES * 60_000) : null,
-        },
-      });
-      if (lock) {
+      const failed = afterFailedAttempt(admin.failedLoginCount, now);
+      await prisma.admin.update({ where: { id: admin.id }, data: failed });
+      if (failed.lockedUntil) {
         return { error: "Troppi tentativi. Riprova tra qualche minuto.", email: typedEmail };
       }
     }

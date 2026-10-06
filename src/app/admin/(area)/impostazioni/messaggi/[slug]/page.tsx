@@ -11,15 +11,12 @@ import { TestEmailForm } from "../TestEmailForm";
 export const metadata: Metadata = { title: "Modifica messaggio" };
 
 export default async function TemplatePage({ params }: { params: Promise<{ slug: string }> }) {
+  const admin = await requireAdmin();
   const { slug } = await params;
   const meta = templateBySlug(slug);
   if (!meta) notFound();
 
-  const [admin, template, business] = await Promise.all([
-    requireAdmin(),
-    loadTemplate(meta.kind, meta.channel),
-    loadBusinessInfo(),
-  ]);
+  const [template, business] = await Promise.all([loadTemplate(meta.kind, meta.channel), loadBusinessInfo()]);
   const defaults = DEFAULT_TEMPLATES[templateKey(meta.kind, meta.channel)]!;
 
   return (

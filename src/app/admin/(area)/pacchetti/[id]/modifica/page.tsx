@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { BackHeader } from "@/components/admin/BackHeader";
+import { requireAdmin } from "@/lib/auth/admin";
 import { centsToInput, formatEuro } from "@/lib/money";
 import { coverageOptions, loadPackage } from "@/lib/packages/queries";
 import { encodeCoverage } from "@/lib/packages/rules";
@@ -11,6 +12,7 @@ import { PackageForm } from "../../_components/PackageForm";
 export const metadata: Metadata = { title: "Modifica pacchetto" };
 
 export default async function ModificaPacchettoClientePage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const [p, coverage] = await Promise.all([loadPackage(id), coverageOptions()]);
   if (!p) notFound();

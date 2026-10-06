@@ -193,3 +193,35 @@ describe("query della disponibilità", () => {
     ]);
   });
 });
+
+describe("limiti anti-abuso (solo clienti)", () => {
+  const slots = [
+    ["2026-10-12", h(9)],
+    ["2026-10-12", h(15)],
+    ["2026-10-19", h(9)],
+    ["2026-10-19", h(15)],
+    ["2026-10-26", h(9)],
+  ] as const;
+
+  it("al massimo 4 prenotazioni online in 24 ore, anche se annullate; l'admin non ha limiti", async () => {
+    for (const [day, minute] of slots.slice(0, 4)) {
+      expect((await book({ startsAt: instantAt(day, minute) })).ok).toBe(true);
+    }
+    await prisma.appointment.updateMany({ data: { status: "CANCELLED" } }); // annullarle non azzera il conteggio
+    const fifth = await book({ startsAt: instantAt(slots[4][0], slots[4][1]) });
+    expect(fifth).toMatchObject({ ok: false, code: "LIMIT", limit: "limite-giorno" });
+    expect((await book({ startsAt: instantAt(slots[4][0], slots[4][1]), actor: "ADMIN" })).ok).toBe(true);
+  });
+
+  it("al massimo 6 appuntamenti confermati in programma", async () => {
+    for (let i = 0; i < 6; i++) {
+      const startsAt = instantAt("2026-11-02", h(9) + i * 60);
+      await prisma.appointment.create({
+        data: { clientId: ids.client, startsAt, endsAt: new Date(startsAt.getTime() + 30 * 60_000), durationMin: 30, bufferMin: 0, totalPriceCents: 0, createdBy: "ADMIN" },
+      });
+    }
+    expect(await book()).toMatchObject({ ok: false, code: "LIMIT", limit: "limite-futuri" });
+    await prisma.appointment.updateMany({ where: { startsAt: instantAt("2026-11-02", h(9)) }, data: { status: "CANCELLED" } });
+    expect((await book()).ok).toBe(true);
+  });
+});

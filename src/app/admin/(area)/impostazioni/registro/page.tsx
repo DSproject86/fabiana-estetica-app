@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { NotificationStatus } from "@prisma/client";
 import { BackHeader } from "@/components/admin/BackHeader";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { MESSAGE_KIND_LABEL } from "@/lib/notifications/defaults";
 import { dayKeyOf, formatDayShort, formatTime } from "@/lib/time/rome";
@@ -18,6 +19,7 @@ const STATUS: Record<NotificationStatus, { label: string; className: string }> =
 };
 
 export default async function RegistroPage() {
+  await requireAdmin();
   const logs = await prisma.notificationLog.findMany({
     orderBy: { createdAt: "desc" },
     take: LIMIT,

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/auth/admin";
 import { loadWeekly } from "@/lib/schedule/queries";
 import { WEEKDAY_NAMES, minutesToTime } from "@/lib/time/rome";
 import { BackLink } from "../../_components/FormBits";
@@ -9,6 +10,7 @@ import { saveWeekday } from "../../actions";
 export const metadata: Metadata = { title: "Settimana tipo" };
 
 export default async function GiornoSettimanaPage({ params }: { params: Promise<{ giorno: string }> }) {
+  await requireAdmin();
   const { giorno } = await params;
   const weekday = Number(giorno);
   if (!Number.isInteger(weekday) || weekday < 1 || weekday > 7) notFound();

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BackHeader } from "@/components/admin/BackHeader";
+import { requireAdmin } from "@/lib/auth/admin";
 import { searchClients } from "@/lib/clients/adminClients";
 import { formatPhone } from "@/lib/clients/phone";
 import { prisma } from "@/lib/db";
@@ -17,6 +18,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
 export default async function VendiPacchettoPage({ searchParams }: { searchParams: SearchParams }) {
+  await requireAdmin();
   const params = await searchParams;
   const clientId = first(params.cliente);
   const q = first(params.q).slice(0, 100);

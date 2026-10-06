@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { loadWeekly } from "@/lib/schedule/queries";
 import { dayKeyToDbDate, isValidDayKey, minutesToTime, todayKey, weekdayOf } from "@/lib/time/rome";
@@ -10,6 +11,7 @@ import { saveException } from "../../actions";
 export const metadata: Metadata = { title: "Nuova eccezione" };
 
 export default async function NuovaEccezionePage({ searchParams }: { searchParams: Promise<{ data?: string }> }) {
+  await requireAdmin();
   const { data } = await searchParams;
   const today = todayKey();
   const date = data && isValidDayKey(data) && data >= today ? data : today;

@@ -10,6 +10,10 @@ on:
         description: "Eseguire anche il seed (idempotente)?"
         type: boolean
         default: true
+      reset_admin_passwords:
+        description: "Reimposta le password admin dai secrets (solo se una password è stata dimenticata: chiude le sessioni aperte)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,6 +36,7 @@ jobs:
       ADMIN_PASSWORD_2: ${{ secrets.ADMIN_PASSWORD_2 }}
       ADMIN_NAME_1: ${{ secrets.ADMIN_NAME_1 }}
       ADMIN_NAME_2: ${{ secrets.ADMIN_NAME_2 }}
+      RESET_ADMIN_PASSWORDS: ${{ inputs.reset_admin_passwords && '1' || '0' }}
     steps:
       - name: Controllo dei secrets
         run: |

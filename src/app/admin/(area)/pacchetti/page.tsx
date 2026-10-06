@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { formatEuro } from "@/lib/money";
 import { loadPackages } from "@/lib/packages/queries";
 import { PackageRow } from "./_components/PackageRow";
@@ -16,6 +17,7 @@ const VIEWS = {
 type View = keyof typeof VIEWS;
 
 export default async function PacchettiPage({ searchParams }: { searchParams: SearchParams }) {
+  await requireAdmin();
   const raw = (await searchParams).vista;
   const view: View = typeof raw === "string" && raw in VIEWS ? (raw as View) : "attivi";
 

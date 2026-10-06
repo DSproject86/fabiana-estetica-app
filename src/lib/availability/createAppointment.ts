@@ -1,5 +1,6 @@
 import "server-only";
 import { Prisma, type Settings } from "@prisma/client";
+import { BOOKING_LIMIT_MESSAGES, bookingLimitProblem, type BookingLimitCode } from "@/lib/booking/abuseLimits";
 import type { Db } from "@/lib/schedule/queries";
 import { dayKeyOf, formatDayShort, formatTime } from "@/lib/time/rome";
 import { bookingDuration } from "./duration";
@@ -23,7 +24,8 @@ export type SlotProblem = { code: SlotProblemCode; error: string };
 
 export type CreateAppointmentResult =
   | { ok: true; appointmentId: string; startsAt: Date; endsAt: Date; totalPriceCents: number }
-  | { ok: false; code: "INVALID" | SlotProblemCode; error: string };
+  | { ok: false; code: "INVALID" | SlotProblemCode; error: string }
+  | { ok: false; code: "LIMIT"; limit: BookingLimitCode; error: string };
 
 /** Violazione del vincolo EXCLUDE "Appointment_no_overlap" (Postgres 23P01). */
 export function isOverlapError(error: unknown): boolean {
@@ -77,6 +79,17 @@ function takenMessage(actor: BookingActor, other: Awaited<ReturnType<typeof find
   return `Si sovrappone all'appuntamento di ${other.client.firstName} ${other.client.lastName} (${formatDayShort(
     dayKeyOf(other.startsAt),
   )}, ${formatTime(other.startsAt)}–${formatTime(end)}). Scegli un altro orario.`;
+}
+
+/** Prenotazioni online fatte nelle ultime 24 ore e appuntamenti confermati in programma della cliente. */
+export async function countClientBookings(db: Db, clientId: string, now: Date) {
+  const [recentBookings, futureAppointments] = await Promise.all([
+    db.appointment.count({
+      where: { clientId, createdBy: "CLIENT", createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60_000) } },
+    }),
+    db.appointment.count({ where: { clientId, status: "CONFIRMED", startsAt: { gte: now } } }),
+  ]);
+  return { recentBookings, futureAppointments };
 }
 
 /**
@@ -154,6 +167,11 @@ export async function createAppointment(input: {
       if (!client || client.anonymizedAt) return { ok: false, code: "INVALID", error: "Cliente non trovata." };
       if (actor === "CLIENT" && client.blockedAt) {
         return { ok: false, code: "INVALID", error: "Non è possibile prenotare online. Contatta Fabiana." };
+      }
+      if (actor === "CLIENT") {
+        // Contati sotto il lock: due prenotazioni simultanee non superano il limite.
+        const limit = bookingLimitProblem(await countClientBookings(tx, clientId, now));
+        if (limit) return { ok: false, code: "LIMIT", limit, error: BOOKING_LIMIT_MESSAGES[limit] };
       }
 
       const loaded = await loadServicesForBooking(serviceIds, actor, tx);

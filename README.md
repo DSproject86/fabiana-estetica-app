@@ -43,7 +43,10 @@ leggendo i secrets del repository: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `ADM
 `ADMIN_EMAIL_2`, `ADMIN_PASSWORD_1`, `ADMIN_PASSWORD_2` (facoltativi `ADMIN_NAME_1`, `ADMIN_NAME_2`).
 Il seed sblocca sempre gli account admin, ignora gli spazi iniziali/finali delle password e rimuove
 gli admin la cui email non è più nei secrets (restano solo i 2 configurati). Rilanciarlo dopo aver
-cambiato una password o un'email admin.
+cambiato un'email admin. Le password dei secrets valgono solo alla **creazione** dell'admin: poi ognuno
+la cambia dall'app (Impostazioni → Il mio account) e il seed non la tocca. Se una password è stata
+dimenticata: Run workflow con **"Reimposta le password admin dai secrets"** spuntato (`RESET_ADMIN_PASSWORDS=1`),
+che riporta le password a quelle dei secrets e chiude le sessioni aperte.
 
 Per una nuova migrazione: modificare `prisma/schema.prisma`, poi
 `npx prisma migrate dev --create-only --name <nome>` su un database di sviluppo, controllare l'SQL e committarlo.
@@ -74,6 +77,10 @@ manda doppioni. Si ferma da solo dopo ~45 s e risponde con un riepilogo JSON (`s
 - `src/app/api/cron/promemoria/`: endpoint del promemoria
 - `src/lib/packages/`: pacchetti delle clienti (conti, pagamenti, sedute scalate dall'agenda)
 - `src/lib/clients/`: ricerca, scheda, blocco ed eliminazione (privacy) delle clienti
+- `src/lib/export/` + `src/app/admin/esporta/[tipo]/`: copia di sicurezza in CSV
+- `src/config/security-headers.ts`: header di sicurezza (CSP ecc.), usati da `next.config.ts`
+- `src/app/manifest.ts`, `src/lib/pwa/`, `src/app/icons/`, `public/sw.js`, `src/app/offline/`: app installabile
+- `src/app/protections.test.ts`: controlla che pagine admin, azioni e API richiedano il login
 - `src/lib/auth/`: sessioni con cookie firmato, password, controlli d'accesso
 - `src/proxy.ts`: primo filtro sulle pagine `/admin`, `/prenota` e `/appuntamenti`
 - `prisma/`: schema, migrazioni, seed

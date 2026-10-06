@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { ServiceForm } from "../../_components/ServiceForm";
 import { SubPageHeader } from "../../_components/SubPageHeader";
@@ -12,6 +13,7 @@ export default async function NuovoServizioPage({
 }: {
   searchParams: Promise<{ categoria?: string }>;
 }) {
+  await requireAdmin();
   const { categoria } = await searchParams;
   const categories = await prisma.serviceCategory.findMany({
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],

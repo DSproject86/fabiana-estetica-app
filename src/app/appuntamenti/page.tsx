@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ClientShell, PageTitle, cardClass, linkButtonClass } from "@/components/client/ClientShell";
 import { WhatsAppIcon } from "@/components/client/WhatsAppIcon";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { requireClient } from "@/lib/auth/client";
 import { loadSettings } from "@/lib/availability/queries";
 import { prisma } from "@/lib/db";
@@ -54,6 +55,7 @@ export default async function AppuntamentiPage() {
   return (
     <ClientShell loggedIn>
       <PageTitle title="I miei appuntamenti" back={{ href: "/", label: "Home" }} />
+      <InstallPrompt />
 
       <section aria-labelledby="prossimi" className="flex flex-col gap-3">
         <h2 id="prossimi" className="text-xl">

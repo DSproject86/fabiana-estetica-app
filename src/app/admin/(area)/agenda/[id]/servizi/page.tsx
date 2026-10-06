@@ -5,6 +5,7 @@ import { parsePickerParams } from "@/lib/agenda/params";
 import { loadAdminCatalog } from "@/lib/agenda/picker";
 import { loadAgendaAppointment } from "@/lib/agenda/queries";
 import { canEdit, mergeItems, notifyByDefault, treatmentEndOf } from "@/lib/agenda/rules";
+import { requireAdmin } from "@/lib/auth/admin";
 import { roundUpTo } from "@/lib/availability/duration";
 import { loadSettings } from "@/lib/availability/queries";
 import { monthOf } from "@/lib/booking/calendar";
@@ -20,6 +21,7 @@ export const metadata: Metadata = { title: "Modifica servizi" };
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function ServiziPage({ params, searchParams }: Props) {
+  await requireAdmin();
   const { id } = await params;
   const [appt, settings, categories] = await Promise.all([loadAgendaAppointment(id), loadSettings(), loadAdminCatalog()]);
   if (!appt) notFound();

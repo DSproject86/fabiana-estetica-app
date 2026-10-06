@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { formatDuration } from "@/lib/duration";
 import { formatEuro } from "@/lib/money";
@@ -28,6 +29,7 @@ function AddLink({ href, children }: { href: string; children: React.ReactNode }
 }
 
 export default async function ListinoPage() {
+  await requireAdmin();
   const [categories, templates] = await Promise.all([
     prisma.serviceCategory.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],

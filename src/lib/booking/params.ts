@@ -1,3 +1,4 @@
+import { BOOKING_LIMIT_MESSAGES } from "./abuseLimits";
 import { isValidDayKey, minutesToTime, timeToMinutes, type DayKey } from "@/lib/time/rome";
 import type { BookingQueryParts } from "./query";
 
@@ -13,6 +14,7 @@ export type BookingParams = BookingQueryParts & {
 };
 
 export const BOOKING_ERRORS = {
+  ...BOOKING_LIMIT_MESSAGES,
   preso: "Orario appena occupato, scegline un altro.",
   "non-prenotabile": "Questo orario non è prenotabile. Scegline un altro.",
   servizi: "Qualcosa non torna nella prenotazione: controlla i servizi scelti e riprova.",

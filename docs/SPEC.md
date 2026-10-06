@@ -100,7 +100,7 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
 
 ## PWA
 
-- Installabile: manifest, service worker, icona.
+- Installabile: manifest, service worker, icone (vedi decisioni step 8b).
 
 ## Grafica
 
@@ -118,14 +118,16 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
 
 ## Roadmap
 
-1. Fondamenta
-2. Listino
-3. Orari di lavoro
-4. Motore disponibilità con test automatici
-5. Area cliente (con accesso tramite codice via email già da questo step)
-6. Email e WhatsApp
-7. Agenda admin e statistiche
-8. Pacchetti, clienti, PWA e lancio
+Stato: **tutti gli step completati** (manca solo quanto indicato nella checklist di lancio, in fondo).
+
+1. ✅ Fondamenta
+2. ✅ Listino
+3. ✅ Orari di lavoro
+4. ✅ Motore disponibilità con test automatici
+5. ✅ Area cliente (con accesso tramite codice via email già da questo step)
+6. ✅ Email e WhatsApp
+7. ✅ Agenda admin e statistiche
+8. ✅ Pacchetti, clienti, PWA e lancio (8a pacchetti e clienti, 8b sicurezza, PWA e checklist; privacy rimandata)
 
 ## Modo di lavorare
 
@@ -291,9 +293,67 @@ Questo documento è il riferimento per tutti gli step di sviluppo.
   - In entrambi i casi il destinatario nel registro invii diventa "cliente eliminata".
 - **Lato cliente:** in "I miei appuntamenti" il riquadro dei pacchetti attivi (sedute rimaste e residuo da pagare).
 
-## Da fare prima del lancio
+## Decisioni prese (step 8b: sicurezza, PWA e lancio)
 
-- **Privacy definitiva + dati titolare + consenso dati sanitari** (prima di invitare le clienti vere): testo definitivo
-  di `/privacy` (ora provvisorio), dati del titolare (nome, indirizzo, P.IVA, email), consenso per le note allergie
-  (dati sanitari) e nuova `PRIVACY_VERSION`.
-- ~~Dominio verificato su Resend e `EMAIL_FROM` con quel dominio.~~ Fatto allo step 6 (fabianaestetica.it).
+- **Nessuna migrazione.**
+- **Il mio account** (Impostazioni → Il mio account), per ciascun admin:
+  - **Cambia password:** attuale + nuova (almeno 10 caratteri, diversa dall'attuale) + conferma. La password attuale
+    sbagliata conta nello stesso blocco del login (`src/lib/auth/lockout.ts`: 5 errori → 15 minuti). Dopo il cambio
+    `sessionVersion` +1: gli altri dispositivi escono, questo riceve un cookie nuovo e resta collegato.
+  - **Esci da tutti i dispositivi:** `sessionVersion` +1, compreso questo (si torna al login).
+- **Seed:** la password dei secrets vale solo alla creazione dell'admin; poi il seed non la tocca più. Il workflow
+  "Database: migrazioni e seed" ha l'opzione **"Reimposta le password admin dai secrets"** (`RESET_ADMIN_PASSWORDS=1`,
+  spenta di default) per il recupero di una password dimenticata: riporta le password ai secrets e chiude le sessioni.
+- **Copia di sicurezza (CSV)** da Impostazioni: clienti, appuntamenti, pacchetti, pagamenti
+  (`GET /admin/esporta/<tipo>`, solo admin collegati, `Cache-Control: no-store`). Separatore `;`, virgola decimale,
+  BOM UTF-8, righe CRLF; date e ore di Roma; le celle che inizierebbero con `= + - @` sono precedute da `'`
+  (CSV injection), tranne i cellulari "+39 …". Le allergie sono nel CSV solo con "Mostra note allergie" acceso.
+- **Header di sicurezza** su tutte le risposte (`src/config/security-headers.ts`): CSP (`default-src 'self'`, script e
+  stili inline ammessi perché servono a Next senza nonce, niente iframe, `form-action 'self'`, `object-src 'none'`,
+  `upgrade-insecure-requests`; in sviluppo `unsafe-eval`, nelle anteprime Vercel `vercel.live`), HSTS 1 anno,
+  `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, COOP, Permissions-Policy.
+- **Limiti anti-abuso** (solo clienti, contati sotto il lock delle prenotazioni): al massimo **4 prenotazioni online
+  in 24 ore** (anche se poi annullate) e **6 appuntamenti confermati in programma**. Raggiunto un limite, `/prenota`
+  lo dice subito e la conferma viene rifiutata col messaggio "scrivi a Fabiana". L'admin non ha limiti.
+  Restano i limiti degli step precedenti: login admin, codici di accesso, iscrizioni dal link, cron con segreto.
+- **Protezioni verificate da un test** (`src/app/protections.test.ts`): ogni server action inizia con
+  `requireAdmin()` (area admin) o `requireClient()`; ogni pagina admin chiama `requireAdmin()` come prima cosa (non
+  basta il layout); le pagine cliente chiamano `requireClient()`; ogni route handler ha la sua protezione (export
+  admin, cron con `CRON_SECRET`, icone pubbliche statiche); il proxy copre `/admin`, `/prenota`, `/appuntamenti`.
+  Le uniche azioni pubbliche (login, codice, iscrizione, esci) sono elencate nel test con il motivo.
+- **PWA:** `manifest.webmanifest` ("Fabiana L. Estetica", standalone, avorio), icone generate al build dai colori di
+  `brand.ts` con Playfair Display (OFL, `src/assets/fonts`): monogramma FL in avorio su rosa cipria, "any" 48–512 px,
+  "maskable" 192/512, icona Apple 180, favicon.
+  - **Service worker** (`public/sw.js`): niente cache dei dati né prenotazioni offline; se manca la rete durante la
+    navigazione mostra `/offline` ("Sei offline"), tenuta in cache con i suoi stili e font. Registrato solo in
+    produzione.
+  - **Riquadro "Aggiungi alla schermata Home"** per le clienti collegate (home e "I miei appuntamenti"): istruzioni
+    per iPhone (Condividi → Aggiungi alla schermata Home) e per Android (pulsante "Installa l'app" se il browser lo
+    offre, altrimenti menu ⋮). Non compare se l'app è aperta dalla Home o è stata installata; chiuso con la ×,
+    ricompare dopo 30 giorni.
+
+## Checklist di lancio
+
+Da fare prima di invitare le clienti vere:
+
+- [ ] **Privacy definitiva + dati titolare + consenso dati sanitari:** testo definitivo di `/privacy` (ora
+  provvisorio), dati del titolare (nome, indirizzo, P.IVA, email), consenso per le note allergie (dati sanitari) e
+  nuova `PRIVACY_VERSION`.
+- [ ] **Variabili su Vercel (Production):** `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `SESSION_SECRET` (≥ 32 caratteri,
+  diverso da quello delle prove), `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `APP_URL` (dominio definitivo,
+  https), `CRON_SECRET`.
+- [ ] **Migrazioni e seed** applicati dal workflow (stato: "Database schema is up to date").
+- [ ] **Admin:** entrambi accedono e cambiano la password dall'app (Il mio account); salvarla in un gestore di password.
+- [ ] **Impostazioni:** WhatsApp e indirizzo dello studio, parametri delle prenotazioni, orari della settimana tipo,
+  testi di email e WhatsApp (mandare un'email di prova), "Mostra note allergie" come deciso.
+- [ ] **Listino:** categorie, servizi con durate e prezzi, pacchetti a listino con "Valido per".
+- [ ] **Clienti e pacchetti in corso:** inserire le clienti con pacchetti già avviati (sedute già fatte e pagamenti).
+- [ ] **Promemoria:** cron orario su `/api/cron/promemoria` con `Authorization: Bearer <CRON_SECRET>`; controllare il
+  registro invii il primo giorno.
+- [ ] **Dominio:** `APP_URL` col dominio definitivo; link d'invito rigenerato su quel dominio.
+- [ ] **Prova completa da telefono:** iscrizione dal link, codice via email, prenotazione, email di conferma con
+  `.ics`, promemoria, agenda (Fatto, scala dal pacchetto), statistiche.
+- [ ] **App installata** su un iPhone e un Android (icona, apertura a schermo intero, pagina "Sei offline").
+- [ ] **Copia di sicurezza:** scaricare i CSV dopo il caricamento iniziale e poi con regolarità (es. ogni mese);
+  Neon tiene comunque la cronologia del database (verificare il periodo di ripristino del piano).
+- [x] Dominio verificato su Resend e `EMAIL_FROM` con quel dominio (step 6, fabianaestetica.it).

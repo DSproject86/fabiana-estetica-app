@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { brand, brandCssVariables } from "@/config/brand";
 import "./globals.css";
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
   title: { default: brand.fullName, template: `%s · ${brand.name}` },
   description: brand.description,
   applicationName: brand.fullName,
+  appleWebApp: { capable: true, title: brand.name, statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
@@ -28,7 +30,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <style dangerouslySetInnerHTML={{ __html: brandCssVariables() }} />
       </head>
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">
+        {children}
+        <ServiceWorkerRegister />
+      </body>
     </html>
   );
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { WhatsAppButton } from "@/components/admin/WhatsAppButton";
+import { requireAdmin } from "@/lib/auth/admin";
 import { loadSettings } from "@/lib/availability/queries";
 import { prisma } from "@/lib/db";
 import { appointmentInfoSelect } from "@/lib/notifications/context";
@@ -19,6 +20,7 @@ export const metadata: Metadata = { title: "Promemoria di domani" };
 export const dynamic = "force-dynamic";
 
 export default async function PromemoriaPage() {
+  await requireAdmin();
   const now = new Date();
   const day = reminderTargetDay(now);
   const { start, end } = dayBounds(day);

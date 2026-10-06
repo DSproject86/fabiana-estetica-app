@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { formatSlots } from "@/lib/schedule/slots";
 import { loadBlocks, loadEffectiveDays, loadOverrides, loadWeekly } from "@/lib/schedule/queries";
@@ -190,6 +191,7 @@ async function Blocks() {
 }
 
 export default async function OrariPage({ searchParams }: { searchParams: Promise<{ sezione?: string }> }) {
+  await requireAdmin();
   const { sezione } = await searchParams;
   const tab: TabId = TABS.some((t) => t.id === sezione) ? (sezione as TabId) : "giorni";
   const hasWeekly = (await prisma.weeklySlot.count()) > 0;

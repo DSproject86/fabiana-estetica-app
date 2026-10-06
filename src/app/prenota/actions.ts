@@ -34,7 +34,7 @@ export async function confirmBookingAction(formData: FormData) {
 
   if (!result.ok) {
     // Si torna agli orari dello stesso giorno, con i servizi ancora spuntati.
-    redirect(`/prenota${bookingQuery({ services, day, error: ERROR_CODES[result.code] })}`);
+    redirect(`/prenota${bookingQuery({ services, day, error: result.code === "LIMIT" ? result.limit : ERROR_CODES[result.code] })}`);
   }
   // Conferma alla cliente e avviso agli admin dopo la risposta: un invio non riuscito non blocca niente.
   sendNewBookingEmailsInBackground(result.appointmentId);

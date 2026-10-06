@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { formatPhone } from "@/lib/clients/phone";
+import { EXPORTS, type ExportKind } from "@/lib/export/exports";
 import { appBaseUrl, getActiveInvite } from "@/lib/invite/invite";
 import { dayKeyOf, formatDayShort } from "@/lib/time/rome";
 import { AdminNotifyToggles } from "./AdminNotifyToggles";
@@ -13,6 +15,7 @@ import { SettingsForm } from "./SettingsForm";
 export const metadata: Metadata = { title: "Impostazioni" };
 
 export default async function ImpostazioniPage() {
+  await requireAdmin();
   const [settings, invite, baseUrl, admins] = await Promise.all([
     prisma.settings.upsert({ where: { id: 1 }, create: { id: 1 }, update: {} }),
     getActiveInvite(),
@@ -30,6 +33,12 @@ export default async function ImpostazioniPage() {
         <h1 className="text-3xl">Impostazioni</h1>
         <p className="text-prugna/70">Link d&apos;invito, contatti, messaggi e regole delle prenotazioni online.</p>
       </header>
+
+      <NavCard
+        href="/admin/impostazioni/account"
+        title="Il mio account"
+        description="Cambia password ed esci da tutti i dispositivi."
+      />
 
       <section aria-labelledby="invito" className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
@@ -83,6 +92,29 @@ export default async function ImpostazioniPage() {
             reminderHour: settings.reminderHour,
           }}
         />
+      </section>
+
+      <section aria-labelledby="backup" className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <h2 id="backup" className="text-xl">Copia di sicurezza</h2>
+          <p className="text-sm text-prugna/70">
+            Scarica i dati in file CSV (si aprono con Excel o Numbers). Conservali in un posto sicuro: contengono dati
+            personali delle clienti.
+          </p>
+        </div>
+        <ul className="grid grid-cols-2 gap-2">
+          {(Object.keys(EXPORTS) as ExportKind[]).map((kind) => (
+            <li key={kind}>
+              <a
+                href={`/admin/esporta/${kind}`}
+                download
+                className="flex min-h-12 items-center justify-center rounded-2xl bg-white px-3 text-center text-sm font-medium ring-1 ring-prugna/10 hover:bg-cipria/15"
+              >
+                {EXPORTS[kind]}
+              </a>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <NavCard

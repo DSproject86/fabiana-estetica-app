@@ -11,10 +11,8 @@ import { TestEmailForm } from "./TestEmailForm";
 export const metadata: Metadata = { title: "Messaggi" };
 
 export default async function MessaggiPage() {
-  const [admin, stored] = await Promise.all([
-    requireAdmin(),
-    prisma.messageTemplate.findMany({ select: { kind: true, channel: true, subject: true, body: true } }),
-  ]);
+  const admin = await requireAdmin();
+  const stored = await prisma.messageTemplate.findMany({ select: { kind: true, channel: true, subject: true, body: true } });
   const storedByKey = new Map(stored.map((t) => [templateKey(t.kind as TemplateKind, t.channel), t]));
 
   const groups = [

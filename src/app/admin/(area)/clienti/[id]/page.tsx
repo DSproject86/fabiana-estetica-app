@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { BackHeader } from "@/components/admin/BackHeader";
 import { WhatsAppButton } from "@/components/admin/WhatsAppButton";
 import { agendaState, type AgendaState } from "@/lib/agenda/rules";
+import { requireAdmin } from "@/lib/auth/admin";
 import { loadSettings } from "@/lib/availability/queries";
 import { formatPhone } from "@/lib/clients/phone";
 import { loadClientTotals } from "@/lib/clients/manage";
@@ -29,6 +30,7 @@ const STATE_LABEL: Record<AgendaState, string> = {
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function SchedaClientePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SearchParams }) {
+  await requireAdmin();
   const { id } = await params;
   const esito = (await searchParams).esito;
   const now = new Date();

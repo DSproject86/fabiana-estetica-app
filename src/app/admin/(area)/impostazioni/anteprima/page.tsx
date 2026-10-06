@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { formatDuration } from "@/lib/duration";
 import { formatEuro } from "@/lib/money";
@@ -14,6 +15,7 @@ export const metadata: Metadata = { title: "Anteprima disponibilità" };
 const DAYS = 7;
 
 export default async function AnteprimaPage({ searchParams }: { searchParams: Promise<{ s?: string }> }) {
+  await requireAdmin();
   const { s } = await searchParams;
   const requested = (s ?? "").split(",").filter(Boolean);
 
