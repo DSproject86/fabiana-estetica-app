@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   addDays,
@@ -23,15 +24,18 @@ import {
 } from "./effective";
 import type { Slot } from "./slots";
 
-export async function loadWeekly(): Promise<WeeklySlotRow[]> {
-  return prisma.weeklySlot.findMany({
+/** Client Prisma normale o di una transazione (per lavorare sotto il lock delle prenotazioni). */
+export type Db = Prisma.TransactionClient;
+
+export async function loadWeekly(db: Db = prisma): Promise<WeeklySlotRow[]> {
+  return db.weeklySlot.findMany({
     orderBy: [{ weekday: "asc" }, { startMinute: "asc" }],
     select: { weekday: true, startMinute: true, endMinute: true },
   });
 }
 
-export async function loadOverrides(fromDay: DayKey, toDay?: DayKey): Promise<OverrideRow[]> {
-  const rows = await prisma.dateOverride.findMany({
+export async function loadOverrides(fromDay: DayKey, toDay?: DayKey, db: Db = prisma): Promise<OverrideRow[]> {
+  const rows = await db.dateOverride.findMany({
     where: {
       date: { gte: dayKeyToDbDate(fromDay), ...(toDay ? { lte: dayKeyToDbDate(toDay) } : {}) },
     },
@@ -47,8 +51,8 @@ export async function loadOverrides(fromDay: DayKey, toDay?: DayKey): Promise<Ov
   }));
 }
 
-export async function loadBlocks(from: Date, to?: Date): Promise<BlockRow[]> {
-  return prisma.timeBlock.findMany({
+export async function loadBlocks(from: Date, to?: Date, db: Db = prisma): Promise<BlockRow[]> {
+  return db.timeBlock.findMany({
     where: { endsAt: { gt: from }, ...(to ? { startsAt: { lt: to } } : {}) },
     orderBy: { startsAt: "asc" },
     select: { id: true, startsAt: true, endsAt: true, reason: true },
@@ -98,9 +102,9 @@ function toConflictItems(rows: AppointmentRow[]): ConflictItem[] {
 }
 
 /** Appuntamenti confermati di un giorno che non starebbero nelle nuove fasce. */
-export async function conflictsForDay(day: DayKey, slots: Slot[]): Promise<ConflictItem[]> {
+export async function conflictsForDay(day: DayKey, slots: Slot[], db: Db = prisma): Promise<ConflictItem[]> {
   const { start, end } = dayBounds(day);
-  const rows = await prisma.appointment.findMany({
+  const rows = await db.appointment.findMany({
     where: { status: "CONFIRMED", startsAt: { gte: start, lt: end } },
     select: appointmentSelect,
   });
@@ -108,8 +112,8 @@ export async function conflictsForDay(day: DayKey, slots: Slot[]): Promise<Confl
 }
 
 /** Appuntamenti confermati il cui trattamento cade nel blocco. */
-export async function conflictsForBlock(startsAt: Date, endsAt: Date): Promise<ConflictItem[]> {
-  const rows = await prisma.appointment.findMany({
+export async function conflictsForBlock(startsAt: Date, endsAt: Date, db: Db = prisma): Promise<ConflictItem[]> {
+  const rows = await db.appointment.findMany({
     where: {
       status: "CONFIRMED",
       startsAt: { lt: endsAt },
@@ -124,16 +128,20 @@ export async function conflictsForBlock(startsAt: Date, endsAt: Date): Promise<C
  * Appuntamenti futuri nei giorni della settimana indicati (senza eccezione su quella data)
  * che resterebbero fuori dalle nuove fasce della settimana tipo.
  */
-export async function conflictsForWeekdays(weekdays: number[], slots: Slot[]): Promise<ConflictItem[]> {
+export async function conflictsForWeekdays(
+  weekdays: number[],
+  slots: Slot[],
+  db: Db = prisma,
+): Promise<ConflictItem[]> {
   const now = new Date();
-  const rows = await prisma.appointment.findMany({
+  const rows = await db.appointment.findMany({
     where: { status: "CONFIRMED", startsAt: { gte: now } },
     select: appointmentSelect,
   });
   const candidates = rows.filter((a) => weekdays.includes(weekdayOf(dayKeyOf(a.startsAt))));
   if (candidates.length === 0) return [];
 
-  const overrides = await loadOverrides(dayKeyOf(now));
+  const overrides = await loadOverrides(dayKeyOf(now), undefined, db);
   const exceptionDays = new Set(overrides.map((o) => o.day));
   const affected = candidates.filter((a) => !exceptionDays.has(dayKeyOf(a.startsAt)));
   return toConflictItems(appointmentsOutsideSlots(affected, slots));

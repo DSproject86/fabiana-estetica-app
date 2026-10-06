@@ -12,6 +12,17 @@ npm run dev              # sviluppo su http://localhost:3000
 npm run lint             # ESLint
 npm run typecheck        # controllo dei tipi
 npm run build            # build di produzione (la usa anche Vercel)
+npm test                 # test automatici (Vitest), senza database
+```
+
+### Test su Postgres vero
+
+Prenotazioni simultanee e vincolo anti-sovrapposizione si verificano su un database **locale**
+usa-e-getta (mai Neon: il setup rifiuta host non locali; i test svuotano le proprie tabelle):
+
+```bash
+createdb fabiana_test
+TEST_DATABASE_URL=postgresql://localhost/fabiana_test npm run test:db
 ```
 
 ## Database

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth/admin";
+import { withBookingLock } from "@/lib/availability/lock";
 import { isConfirmed, slotsFromForm, type OrariFormState } from "@/lib/schedule/form";
 import {
   conflictsForBlock,
@@ -24,6 +25,7 @@ import {
 
 // Ogni azione è un endpoint pubblico: il controllo admin va fatto sempre, qui dentro.
 // Nessuna azione cancella o modifica appuntamenti: in caso di conflitto si chiede conferma.
+// Le modifiche che cambiano l'occupazione del calendario passano dal lock delle prenotazioni.
 
 function done(section: string): never {
   revalidatePath("/admin/orari");
@@ -56,17 +58,19 @@ export async function saveWeekday(
     .filter((d) => Number.isInteger(d) && d >= 1 && d <= 7 && d !== weekday);
   const weekdays = [weekday, ...new Set(extra)];
 
-  if (!isConfirmed(formData)) {
-    const conflicts = await conflictsForWeekdays(weekdays, parsed.slots);
-    if (conflicts.length > 0) return { conflicts };
-  }
-
-  await prisma.$transaction([
-    prisma.weeklySlot.deleteMany({ where: { weekday: { in: weekdays } } }),
-    prisma.weeklySlot.createMany({
+  // Controllo conflitti e salvataggio sotto lo stesso lock delle prenotazioni.
+  const conflicts = await withBookingLock(async (tx) => {
+    if (!isConfirmed(formData)) {
+      const found = await conflictsForWeekdays(weekdays, parsed.slots, tx);
+      if (found.length > 0) return found;
+    }
+    await tx.weeklySlot.deleteMany({ where: { weekday: { in: weekdays } } });
+    await tx.weeklySlot.createMany({
       data: weekdays.flatMap((d) => parsed.slots.map((s) => ({ weekday: d, ...s }))),
-    }),
-  ]);
+    });
+    return [];
+  });
+  if (conflicts.length > 0) return { conflicts };
   done("settimana");
 }
 
@@ -115,15 +119,12 @@ export async function saveException(
     return { fieldErrors: { date: "Per questa data c'è già un'eccezione: modifica quella." } };
   }
 
-  if (!isConfirmed(formData)) {
-    const conflicts = await conflictsForDay(date, slots);
-    if (conflicts.length > 0) return { conflicts };
-  }
-
-  await prisma.$transaction(async (tx) => {
-    if (id) {
-      await tx.dateOverride.delete({ where: { id } }).catch(() => null);
+  const conflicts = await withBookingLock(async (tx) => {
+    if (!isConfirmed(formData)) {
+      const found = await conflictsForDay(date, slots, tx);
+      if (found.length > 0) return found;
     }
+    if (id) await tx.dateOverride.deleteMany({ where: { id } });
     await tx.dateOverride.create({
       data: {
         date: dayKeyToDbDate(date),
@@ -132,7 +133,9 @@ export async function saveException(
         slots: { create: slots },
       },
     });
+    return [];
   });
+  if (conflicts.length > 0) return { conflicts };
   done("eccezioni");
 }
 
@@ -146,17 +149,20 @@ export async function deleteException(
   const override = await prisma.dateOverride.findUnique({ where: { id } });
   if (!override) done("eccezioni");
 
-  if (!isConfirmed(formData)) {
-    const day = dbDateToDayKey(override.date);
-    const weekly = await prisma.weeklySlot.findMany({
-      where: { weekday: weekdayOf(day) },
-      select: { startMinute: true, endMinute: true },
-    });
-    const conflicts = await conflictsForDay(day, weekly);
-    if (conflicts.length > 0) return { conflicts };
-  }
-
-  await prisma.dateOverride.delete({ where: { id } });
+  const conflicts = await withBookingLock(async (tx) => {
+    if (!isConfirmed(formData)) {
+      const day = dbDateToDayKey(override.date);
+      const weekly = await tx.weeklySlot.findMany({
+        where: { weekday: weekdayOf(day) },
+        select: { startMinute: true, endMinute: true },
+      });
+      const found = await conflictsForDay(day, weekly, tx);
+      if (found.length > 0) return found;
+    }
+    await tx.dateOverride.deleteMany({ where: { id } });
+    return [];
+  });
+  if (conflicts.length > 0) return { conflicts };
   done("eccezioni");
 }
 
@@ -195,12 +201,15 @@ export async function createBlock(_prev: OrariFormState, formData: FormData): Pr
   const endsAt = instantAt(date, endMinute);
   if (endsAt <= new Date()) return { error: "Questa fascia è già passata." };
 
-  if (!isConfirmed(formData)) {
-    const conflicts = await conflictsForBlock(startsAt, endsAt);
-    if (conflicts.length > 0) return { conflicts };
-  }
-
-  await prisma.timeBlock.create({ data: { startsAt, endsAt, reason } });
+  const conflicts = await withBookingLock(async (tx) => {
+    if (!isConfirmed(formData)) {
+      const found = await conflictsForBlock(startsAt, endsAt, tx);
+      if (found.length > 0) return found;
+    }
+    await tx.timeBlock.create({ data: { startsAt, endsAt, reason } });
+    return [];
+  });
+  if (conflicts.length > 0) return { conflicts };
   done("blocchi");
 }
 

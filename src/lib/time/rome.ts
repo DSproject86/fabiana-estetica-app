@@ -41,6 +41,11 @@ export function addDays(day: DayKey, days: number): DayKey {
   return fromDayKey(day).plus({ days }).toISODate()!;
 }
 
+/** Stesso giorno N mesi dopo (31 gen + 1 mese = 28/29 feb). */
+export function addMonths(day: DayKey, months: number): DayKey {
+  return fromDayKey(day).plus({ months }).toISODate()!;
+}
+
 /** 1 = lunedì … 7 = domenica */
 export function weekdayOf(day: DayKey): number {
   return fromDayKey(day).weekday;

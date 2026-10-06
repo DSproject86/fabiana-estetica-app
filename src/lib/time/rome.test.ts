@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  addMonths,
   dayBounds,
   dayKeyOf,
   dayKeyToDbDate,
@@ -100,5 +101,12 @@ describe("giorni e formattazione", () => {
     expect(timeToMinutes("24:00")).toBeNull();
     expect(timeToMinutes("abc")).toBeNull();
     expect(formatDayShort("2026-10-12")).toBe("lun 12 ott");
+  });
+});
+
+describe("addMonths", () => {
+  it("aggiunge mesi di calendario", () => {
+    expect(addMonths("2026-10-06", 3)).toBe("2027-01-06");
+    expect(addMonths("2026-11-30", 3)).toBe("2027-02-28");
   });
 });
